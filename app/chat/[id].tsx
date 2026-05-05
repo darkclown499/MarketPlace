@@ -77,7 +77,7 @@ export default function ChatScreen() {
   const [otherTyping, setOtherTyping] = useState(false);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList>(null);
-  const { messages, loading, refreshing, reload } = useMessages(id);
+  const { messages, loading, refreshing, reload, pollSilent, appendMessage } = useMessages(id);
   const { refreshUnread } = useConversations();
 
   useEffect(() => {
@@ -152,8 +152,25 @@ export default function ChatScreen() {
     if (!content || !id || sending) return;
     setSending(true);
     setText('');
-    const { error } = await sendMessage(id, content);
-    if (error) showAlert(isAr ? 'خطأ' : 'Error', error);
+
+    // Optimistic: show message instantly before DB confirms
+    const tempMsg: import('@/services/chatService').Message = {
+      id: `temp_${Date.now()}`,
+      conversation_id: id,
+      sender_id: user?.id ?? '',
+      content,
+      read_at: null,
+      created_at: new Date().toISOString(),
+    };
+    appendMessage(tempMsg);
+
+    const { data: sent, error } = await sendMessage(id, content);
+    if (error) {
+      showAlert(isAr ? 'خطأ' : 'Error', error);
+    } else {
+      // Replace temp with real message via silent poll
+      pollSilent();
+    }
     setSending(false);
     // Clear typing indicator after send
     if (conversation) {

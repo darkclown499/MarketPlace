@@ -63,6 +63,15 @@ export function useMessages(conversationId: string) {
     setRefreshing(false);
   }, [pollSilent]);
 
+  // Optimistic append: add message instantly to UI, then reconcile with DB
+  const appendMessage = useCallback((msg: Message) => {
+    setMessages(prev => {
+      // Avoid duplicates if poll already fetched it
+      if (prev.find(m => m.id === msg.id)) return prev;
+      return [...prev, msg];
+    });
+  }, []);
+
   useEffect(() => {
     if (!conversationId) return;
     // Initial load
@@ -77,7 +86,7 @@ export function useMessages(conversationId: string) {
     };
   }, [conversationId]);
 
-  return { messages, loading: initialLoading, refreshing, reload };
+  return { messages, loading: initialLoading, refreshing, reload, pollSilent, appendMessage };
 }
 
 export function useConversations() {
@@ -86,13 +95,16 @@ export function useConversations() {
   const [unreadCount, setUnreadCount] = useState(0);
   const prevUnreadRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Prevents the background poll from overwriting the count right after markRead
+  const suppressPollRef = useRef(false);
 
   /** Recompute only the unread badge count without refetching conversations */
-  const refreshUnread = async () => {
+  const refreshUnread = useCallback(async () => {
+    suppressPollRef.current = true; // Block next poll from overwriting
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setUnreadCount(0); prevUnreadRef.current = 0; return; }
+      if (!user) { setUnreadCount(0); prevUnreadRef.current = 0; suppressPollRef.current = false; return; }
 
       const { count } = await supabase
         .from('messages')
@@ -109,14 +121,20 @@ export function useConversations() {
       }
     } catch {
       setUnreadCount(0);
+    } finally {
+      // Re-enable poll after a short grace period
+      setTimeout(() => { suppressPollRef.current = false; }, 2000);
     }
-  };
+  }, []);
 
   const load = async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
     const { data } = await fetchMyConversations();
     setConversations(data);
     if (showSpinner) setLoading(false);
+
+    // Skip count update if refreshUnread just ran (prevents overwrite race)
+    if (suppressPollRef.current) return;
 
     // Compute unread count
     try {
