@@ -17,7 +17,7 @@ import type { Language } from '@/constants/i18n';
 type Mode = 'login' | 'register' | 'otp';
 type AuthMethod = 'email' | 'sms';
 
-const PHONE_PREFIXES = ['+970', '+972', '+1', '+44'];
+const PHONE_PREFIXES = ['+970', '+972'];
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
