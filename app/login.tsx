@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth, useAlert } from '@/template';
 import { getSupabaseClient } from '@/template';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { Button, Input } from '@/components';
 import { Spacing, FontSize, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
@@ -20,7 +21,7 @@ const PHONE_PREFIXES = ['+970', '+972', '+1', '+44'];
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { signInWithPassword, sendOTP, verifyOTPAndLogin, operationLoading } = useAuth();
+  const { signInWithPassword, sendOTP, verifyOTPAndLogin, signInWithGoogle, operationLoading } = useAuth();
   const { showAlert } = useAlert();
   const { colors, isDark } = useTheme();
   const { t, language, setLanguage } = useLanguage();
@@ -43,6 +44,7 @@ export default function LoginScreen() {
   const [smsOtp, setSmsOtp] = useState('');
   const [smsSent, setSmsSent] = useState(false);
   const [smsLoading, setSmsLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const togglePassword = useCallback(() => setShowPassword(v => !v), []);
   const toggleConfirmPassword = useCallback(() => setShowConfirmPassword(v => !v), []);
@@ -73,6 +75,33 @@ export default function LoginScreen() {
     if (error) showAlert(t.verificationFailed, error);
   };
 
+  // ── Helper: extract edge function error message ──
+  const extractEdgeFnError = async (error: any): Promise<string> => {
+    if (error instanceof FunctionsHttpError) {
+      try {
+        const text = await error.context?.text();
+        if (text) {
+          try { const p = JSON.parse(text); return p?.error ?? p?.message ?? text; }
+          catch { return text; }
+        }
+      } catch { }
+    }
+    return error?.message ?? 'Unknown error';
+  };
+
+  // ── Google Sign-In ──
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      const { error } = await signInWithGoogle();
+      if (error) showAlert(isAr ? 'خطأ' : 'Error', error);
+    } catch (e: any) {
+      showAlert(isAr ? 'خطأ' : 'Error', e.message ?? 'Google sign-in failed');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   // ── SMS: Send OTP ──
   const handleSendSmsOtp = async () => {
     if (!phoneLocal.trim()) {
@@ -85,7 +114,7 @@ export default function LoginScreen() {
         body: { action: 'send', phone: fullPhone },
       });
       if (error) {
-        const msg = error.message ?? 'Failed to send SMS';
+        const msg = await extractEdgeFnError(error);
         showAlert(isAr ? 'خطأ' : 'Error', msg);
         return;
       }
@@ -113,7 +142,8 @@ export default function LoginScreen() {
         body: { action: 'verify', phone: fullPhone, otp: smsOtp },
       });
       if (error) {
-        showAlert(isAr ? 'خطأ' : 'Error', error.message ?? 'Verification failed');
+        const msg = await extractEdgeFnError(error);
+        showAlert(isAr ? 'فشل التحقق' : 'Verification failed', msg);
         return;
       }
       if (data?.error) {
@@ -429,6 +459,27 @@ export default function LoginScreen() {
           )}
         </View>
 
+        {/* ── GOOGLE DIVIDER + BUTTON ── */}
+        <View style={styles.dividerRow}>
+          <View style={[styles.dividerLine, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
+          <Text style={[styles.dividerText, { color: 'rgba(255,255,255,0.55)' }]}>
+            {isAr ? 'أو' : 'or'}
+          </Text>
+          <View style={[styles.dividerLine, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
+        </View>
+        <Pressable
+          style={[styles.googleBtn, { opacity: googleLoading ? 0.75 : 1 }]}
+          onPress={handleGoogleSignIn}
+          disabled={googleLoading}
+        >
+          <View style={styles.googleIconWrap}>
+            <Text style={styles.googleG}>G</Text>
+          </View>
+          <Text style={styles.googleBtnText}>
+            {isAr ? 'المتابعة عبر Google' : 'Continue with Google'}
+          </Text>
+        </Pressable>
+
         {/* SMS info note */}
         {authMethod === 'sms' ? (
           <View style={[styles.smsNote, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: 'rgba(255,255,255,0.2)' }]}>
@@ -535,4 +586,24 @@ const styles = StyleSheet.create({
   smsNoteText: {
     flex: 1, fontSize: FontSize.xs, color: 'rgba(255,255,255,0.65)', lineHeight: 18,
   },
+  dividerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: { fontSize: FontSize.xs, fontWeight: '600' },
+  googleBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: Spacing.sm, borderRadius: Radius.xl,
+    paddingVertical: 14, marginTop: Spacing.sm,
+    backgroundColor: '#fff',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12, shadowRadius: 6, elevation: 4,
+  },
+  googleIconWrap: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: '#4285F4', alignItems: 'center', justifyContent: 'center',
+  },
+  googleG: { color: '#fff', fontSize: 13, fontWeight: '900', lineHeight: 17 },
+  googleBtnText: { color: '#1a1a1a', fontSize: FontSize.md, fontWeight: '700' },
 });

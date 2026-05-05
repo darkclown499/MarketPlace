@@ -114,15 +114,18 @@ serve(async (req) => {
       const syntheticEmail = `phone_${normalizedPhone}@sms.souqqalqilya.local`;
       const syntheticPassword = `SMS_${normalizedPhone}_SQ_2024!`;
 
-      // Try to find existing user by synthetic email
-      const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-      const existingUser = existingUsers?.users?.find(u => u.email === syntheticEmail);
+      // Try to find existing user via user_profiles table (efficient — no listUsers)
+      const { data: profileData } = await supabaseAdmin
+        .from('user_profiles')
+        .select('id')
+        .eq('email', syntheticEmail)
+        .maybeSingle();
 
       let userId: string;
 
-      if (existingUser) {
-        // Existing user — sign in by creating a session
-        userId = existingUser.id;
+      if (profileData?.id) {
+        // Existing user
+        userId = profileData.id;
       } else {
         // New user — create account
         const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
