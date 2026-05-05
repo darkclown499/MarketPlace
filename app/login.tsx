@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Pressable,
 } from 'react-native';
@@ -26,6 +26,11 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otp, setOtp] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const togglePassword = useCallback(() => setShowPassword(v => !v), []);
+  const toggleConfirmPassword = useCallback(() => setShowConfirmPassword(v => !v), []);
 
   const handleLogin = async () => {
     if (!email || !password) return showAlert(t.missingFields, t.fillAllFields);
@@ -144,7 +149,22 @@ export default function LoginScreen() {
                 <Text style={[styles.formSub, { color: colors.textMuted }]}>{t.signInAccount}</Text>
               </View>
               <Input label={t.emailAddress} placeholder={t.emailPlaceholder} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-              <Input label={t.password} placeholder={t.passwordPlaceholder} value={password} onChangeText={setPassword} secureTextEntry />
+              <Input
+                label={t.password}
+                placeholder={t.passwordPlaceholder}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                rightElement={
+                  <Pressable onPress={togglePassword} hitSlop={8}>
+                    <MaterialIcons
+                      name={showPassword ? 'visibility' : 'visibility-off'}
+                      size={20}
+                      color={colors.textMuted}
+                    />
+                  </Pressable>
+                }
+              />
               <Button label={t.signIn} onPress={handleLogin} loading={operationLoading} size="lg" />
             </>
           ) : (
@@ -154,8 +174,38 @@ export default function LoginScreen() {
                 <Text style={[styles.formSub, { color: colors.textMuted }]}>{t.joinToBuySell}</Text>
               </View>
               <Input label={t.emailAddress} placeholder={t.emailPlaceholder} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-              <Input label={t.password} placeholder={t.minPassword} value={password} onChangeText={setPassword} secureTextEntry />
-              <Input label={t.confirmPassword} placeholder={t.repeatPassword} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
+              <Input
+                label={t.password}
+                placeholder={t.minPassword}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                rightElement={
+                  <Pressable onPress={togglePassword} hitSlop={8}>
+                    <MaterialIcons
+                      name={showPassword ? 'visibility' : 'visibility-off'}
+                      size={20}
+                      color={colors.textMuted}
+                    />
+                  </Pressable>
+                }
+              />
+              <Input
+                label={t.confirmPassword}
+                placeholder={t.repeatPassword}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirmPassword}
+                rightElement={
+                  <Pressable onPress={toggleConfirmPassword} hitSlop={8}>
+                    <MaterialIcons
+                      name={showConfirmPassword ? 'visibility' : 'visibility-off'}
+                      size={20}
+                      color={colors.textMuted}
+                    />
+                  </Pressable>
+                }
+              />
               <Button label={t.continueCode} onPress={handleSendOTP} loading={operationLoading} size="lg" />
             </>
           )}
