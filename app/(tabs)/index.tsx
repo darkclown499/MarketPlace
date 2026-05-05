@@ -197,7 +197,12 @@ export default function HomeScreen() {
                 {isAr ? 'اكتشف العروض 🛍️' : 'Discover Deals 🛍️'}
               </Text>
             )}
+            <View style={[styles.appNameRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
             <Text style={[styles.appName, { textAlign: isRTL ? 'right' : 'left' }]}>{appTitle}</Text>
+            <View style={styles.betaBadge}>
+              <Text style={styles.betaBadgeText}>BETA</Text>
+            </View>
+          </View>
           </View>
           <View style={[styles.headerActions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
             <Pressable
@@ -446,12 +451,32 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     fontWeight: '500',
   },
+  appNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   appName: {
     fontSize: 26,
     fontWeight: '800',
     color: '#fff',
     letterSpacing: -0.6,
     lineHeight: 30,
+  },
+  betaBadge: {
+    backgroundColor: '#F59E0B',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    alignSelf: 'center',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.45,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  betaBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    lineHeight: 13,
   },
   headerActions: { gap: 8 },
   headerBtn: {

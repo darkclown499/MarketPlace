@@ -30,6 +30,7 @@ export default function LoginScreen() {
 
   const [mode, setMode] = useState<Mode>('login');
   const [authMethod, setAuthMethod] = useState<AuthMethod>('email');
+  const SMS_COMING_SOON = true;
 
   // Email auth fields
   const [email, setEmail] = useState('');
@@ -228,7 +229,12 @@ export default function LoginScreen() {
               <MaterialIcons name="storefront" size={36} color="#fff" />
             </View>
           </View>
-          <Text style={styles.appName}>{isAr ? APP_NAME_AR : APP_NAME}</Text>
+          <View style={styles.appNameHeroRow}>
+            <Text style={styles.appName}>{isAr ? APP_NAME_AR : APP_NAME}</Text>
+            <View style={styles.heroBetaBadge}>
+              <Text style={styles.heroBetaBadgeText}>BETA</Text>
+            </View>
+          </View>
           <Text style={styles.tagline}>{t.tagline}</Text>
         </View>
 
@@ -239,31 +245,42 @@ export default function LoginScreen() {
           <View style={[styles.methodToggle, { backgroundColor: colors.background }]}>
             {(['email', 'sms'] as AuthMethod[]).map(m => {
               const isActive = authMethod === m;
+              const disabled = m === 'sms' && SMS_COMING_SOON;
               return (
                 <Pressable
                   key={m}
                   style={[
                     styles.methodBtn,
-                    isActive && [styles.methodBtnActive, { backgroundColor: colors.primary, ...Shadow.colored }],
+                    isActive && !disabled && [styles.methodBtnActive, { backgroundColor: colors.primary, ...Shadow.colored }],
+                    disabled && styles.methodBtnDisabled,
                   ]}
                   onPress={() => {
+                    if (disabled) return;
                     setAuthMethod(m);
                     setMode('login');
                     setSmsSent(false);
                     setSmsOtp('');
                     setOtp('');
                   }}
+                  disabled={disabled}
                 >
                   <MaterialIcons
                     name={m === 'email' ? 'email' : 'sms'}
                     size={15}
-                    color={isActive ? '#fff' : colors.textMuted}
+                    color={disabled ? colors.textMuted : isActive ? '#fff' : colors.textMuted}
                   />
-                  <Text style={[styles.methodBtnText, { color: isActive ? '#fff' : colors.textMuted }, isActive && { fontWeight: '700' }]}>
-                    {m === 'email'
-                      ? (isAr ? 'البريد الإلكتروني' : 'Email')
-                      : (isAr ? 'رسالة SMS' : 'SMS')}
-                  </Text>
+                  <View style={{ alignItems: 'flex-start', gap: 1 }}>
+                    <Text style={[styles.methodBtnText, { color: disabled ? colors.textMuted : isActive ? '#fff' : colors.textMuted }, isActive && !disabled && { fontWeight: '700' }]}>
+                      {m === 'email'
+                        ? (isAr ? 'البريد الإلكتروني' : 'Email')
+                        : (isAr ? 'رسالة SMS' : 'SMS')}
+                    </Text>
+                    {disabled ? (
+                      <Text style={styles.comingSoonText}>
+                        {isAr ? 'قريباً' : 'Coming Soon'}
+                      </Text>
+                    ) : null}
+                  </View>
                 </Pressable>
               );
             })}
@@ -552,7 +569,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
-  appName: { fontSize: FontSize.xxxl, fontWeight: '800', color: '#fff', letterSpacing: -0.8, marginBottom: 4 },
+  appNameHeroRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 4 },
+  appName: { fontSize: FontSize.xxxl, fontWeight: '800', color: '#fff', letterSpacing: -0.8 },
+  heroBetaBadge: {
+    backgroundColor: '#F59E0B',
+    borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3,
+    alignSelf: 'center',
+    shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5, shadowRadius: 4, elevation: 3,
+  },
+  heroBetaBadgeText: { color: '#fff', fontSize: 9, fontWeight: '900', letterSpacing: 1.2, lineHeight: 13 },
   tagline: { fontSize: FontSize.sm, color: 'rgba(255,255,255,0.65)', textAlign: 'center' },
 
   card: { borderRadius: Radius.xxl, padding: Spacing.lg },
@@ -567,7 +593,9 @@ const styles = StyleSheet.create({
     gap: 6, paddingVertical: 11, borderRadius: Radius.sm,
   },
   methodBtnActive: {},
+  methodBtnDisabled: { opacity: 0.5 },
   methodBtnText: { fontSize: FontSize.sm, fontWeight: '500' },
+  comingSoonText: { fontSize: 9, fontWeight: '700', color: '#F59E0B', letterSpacing: 0.5, lineHeight: 12 },
 
   // Email auth
   tabs: { flexDirection: 'row', borderRadius: Radius.md, padding: 4, marginBottom: Spacing.lg, gap: 4 },
