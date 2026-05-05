@@ -51,7 +51,7 @@ export default function OnboardingScreen() {
 
   const finish = async () => {
     await AsyncStorage.setItem(ONBOARDING_SEEN_KEY, '1');
-    router.replace('/login');
+    router.replace('/beta-warning');
   };
 
   const goNext = () => {
