@@ -77,7 +77,7 @@ export default function PostAdScreen() {
     if (!title.trim()) return showAlert(language === 'ar' ? 'مطلوب' : 'Required', language === 'ar' ? 'يرجى إدخال عنوان' : 'Please enter a title.');
     if (!description.trim()) return showAlert(language === 'ar' ? 'مطلوب' : 'Required', language === 'ar' ? 'يرجى إدخال وصف' : 'Please enter a description.');
     if (!categoryId) return showAlert(language === 'ar' ? 'مطلوب' : 'Required', language === 'ar' ? 'يرجى اختيار تصنيف' : 'Please select a category.');
-    if (!location.trim()) return showAlert(language === 'ar' ? 'مطلوب' : 'Required', language === 'ar' ? 'يرجى إدخال الموقع' : 'Please enter a location.');
+    if (!location.trim()) return showAlert(language === 'ar' ? 'مطلوب' : 'Required', language === 'ar' ? 'يرجى إدخال الحي أو المنطقة' : 'Please enter your neighbourhood.');
     if (!phoneLocal.trim()) return showAlert(language === 'ar' ? 'مطلوب' : 'Required', language === 'ar' ? 'يرجى إدخال رقم الهاتف' : 'Please enter a phone number.');
 
     const fullPhone = `${phonePrefix}${phoneLocal.trim()}`;
@@ -85,7 +85,7 @@ export default function PostAdScreen() {
     try {
       const { data: ad, error: adError } = await createAd({
         title: title.trim(), description: description.trim(),
-        price: parseFloat(price) || 0, location: location.trim(),
+        price: parseFloat(price) || 0, location: `${language === 'ar' ? 'قلقيلية' : 'Qalqilya'}${location.trim() ? ` - ${location.trim()}` : ''}`,
         category_id: categoryId, phone_number: fullPhone, condition,
       });
       if (adError || !ad) throw new Error(adError ?? 'Failed to create ad');
@@ -219,7 +219,24 @@ export default function PostAdScreen() {
               <Text style={[styles.sectionLabel, { color: colors.textPrimary }]}>{t.priceLocation}</Text>
             </View>
             <Input label={t.price} placeholder={t.pricePlaceholder} value={price} onChangeText={setPrice} keyboardType="numeric" />
-            <Input label={t.location} placeholder={t.locationPlaceholder} value={location} onChangeText={setLocation} />
+            <Text style={[styles.locationLabel, { color: colors.textSecondary }, textAlign]}>
+              {language === 'ar' ? 'الموقع' : 'Location'}
+            </Text>
+            <View style={[styles.locationFieldRow, { borderColor: colors.border, backgroundColor: colors.background, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+              <View style={[styles.locationCity, { backgroundColor: colors.primaryGhost, borderColor: colors.primaryGhost }]}>
+                <MaterialIcons name="location-city" size={13} color={colors.primary} />
+                <Text style={[styles.locationCityText, { color: colors.primary }]}>
+                  {language === 'ar' ? 'قلقيلية' : 'Qalqilya'}
+                </Text>
+              </View>
+              <View style={[styles.locationDivider, { backgroundColor: colors.border }]} />
+              <Input
+                placeholder={language === 'ar' ? 'الحي أو المنطقة' : 'Neighbourhood / Area'}
+                value={location}
+                onChangeText={setLocation}
+                containerStyle={styles.locationInputContainer}
+              />
+            </View>
           </View>
 
           {/* Phone Number */}
@@ -364,6 +381,18 @@ const styles = StyleSheet.create({
   conditionText: { fontSize: FontSize.md },
 
   fieldLabel: { fontSize: FontSize.sm, fontWeight: '600', marginBottom: 6, letterSpacing: 0.1 },
+  locationLabel: { fontSize: FontSize.sm, fontWeight: '600', marginBottom: 6, letterSpacing: 0.1 },
+  locationFieldRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1.5, borderRadius: Radius.md, overflow: 'hidden', marginBottom: Spacing.sm,
+  },
+  locationCity: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 14,
+  },
+  locationCityText: { fontSize: FontSize.sm, fontWeight: '700' },
+  locationDivider: { width: 1, height: 50 },
+  locationInputContainer: { flex: 1, marginBottom: 0 },
   phoneRow: { gap: Spacing.sm, alignItems: 'flex-start', marginBottom: 4 },
   prefixWrap: {
     borderWidth: 1.5, borderRadius: Radius.md,
