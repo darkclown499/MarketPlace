@@ -101,25 +101,60 @@ export async function fetchMessages(conversationId: string): Promise<{ data: Mes
 export async function sendMessage(
   conversationId: string,
   content: string
-): Promise<{ data: Message | null; error: string | null }> {
+): Promise<{ data: Message | null; recipientId: string | null; error: string | null }> {
   const supabase = getSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { data: null, error: 'Not authenticated' };
+  if (!user) return { data: null, recipientId: null, error: 'Not authenticated' };
 
+  // Insert message
   const { data, error } = await supabase
     .from('messages')
     .insert({ conversation_id: conversationId, sender_id: user.id, content })
     .select()
     .single();
 
-  if (error) return { data: null, error: error.message };
+  if (error) return { data: null, recipientId: null, error: error.message };
 
+  // Update conversation last_message
   await supabase
     .from('conversations')
     .update({ last_message: content, last_message_at: new Date().toISOString() })
     .eq('id', conversationId);
 
-  return { data: data as Message, error: null };
+  // Determine recipient
+  const { data: conv } = await supabase
+    .from('conversations')
+    .select('buyer_id, seller_id')
+    .eq('id', conversationId)
+    .single();
+
+  const recipientId = conv
+    ? (conv.buyer_id === user.id ? conv.seller_id : conv.buyer_id)
+    : null;
+
+  return { data: data as Message, recipientId, error: null };
+}
+
+/**
+ * Send a push notification to the message recipient via the push-notify edge function.
+ * Fire-and-forget — never throws.
+ */
+export async function notifyRecipient(
+  recipientId: string,
+  senderName: string,
+  messageContent: string,
+): Promise<void> {
+  try {
+    const supabase = getSupabaseClient();
+    // Non-blocking — don't await the result in the critical path
+    supabase.functions.invoke('push-notify', {
+      body: {
+        recipient_id: recipientId,
+        sender_name: senderName,
+        message_preview: messageContent.substring(0, 100),
+      },
+    }).catch(() => {}); // swallow all errors silently
+  } catch (_) {}
 }
 
 /** Mark all messages in a conversation as read (for the current user, messages not sent by them) */
@@ -165,4 +200,17 @@ export async function fetchTypingStatus(
     buyer_typing_at: data?.buyer_typing_at ?? null,
     seller_typing_at: data?.seller_typing_at ?? null,
   };
+}
+
+/** Save or update the Expo push token for the current user */
+export async function savePushToken(token: string): Promise<void> {
+  try {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase
+      .from('user_profiles')
+      .update({ push_token: token })
+      .eq('id', user.id);
+  } catch (_) {}
 }

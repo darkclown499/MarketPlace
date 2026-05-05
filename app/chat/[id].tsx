@@ -8,7 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth, useAlert } from '@/template';
 import { useMessages, useConversations } from '@/hooks/useChat';
-import { fetchConversationById, sendMessage, markMessagesRead, updateTypingIndicator, fetchTypingStatus, Conversation } from '@/services/chatService';
+import { fetchConversationById, sendMessage, markMessagesRead, updateTypingIndicator, fetchTypingStatus, notifyRecipient, Conversation } from '@/services/chatService';
 import { Spacing, FontSize, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -77,7 +77,7 @@ export default function ChatScreen() {
   const [otherTyping, setOtherTyping] = useState(false);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList>(null);
-  const { messages, loading, refreshing, reload, pollSilent, appendMessage } = useMessages(id);
+  const { messages, loading, refreshing, reload, pollSilent, appendMessage, updateMessage } = useMessages(id);
   const { refreshUnread } = useConversations();
 
   useEffect(() => {
@@ -125,25 +125,33 @@ export default function ChatScreen() {
     };
   }, [id, user?.id, conversation]);
 
-  // Compute whether there are unread messages from the other person.
-  // This drives the mark-read effect below — avoids spamming DB on every poll
-  // when there's nothing to mark, and fires reliably whenever new unread arrive.
+  // ── Mark messages as read ──────────────────────────────────────────────────
+  // Fire immediately on mount AND whenever new unread messages arrive.
+  // Uses a short debounce (80ms) to coalesce rapid poll updates.
   const hasUnreadFromOther = messages.some(m => m.sender_id !== user?.id && !m.read_at);
-
   const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMarkReadRef = useRef<number>(0);
+
   useEffect(() => {
-    if (!id || !user || !hasUnreadFromOther) return;
-    // Debounce slightly so we don't fire multiple times in quick succession
-    if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
-    markReadTimerRef.current = setTimeout(async () => {
+    if (!id || !user) return;
+    // Always attempt mark-read on mount (even before first poll)
+    const doMark = async () => {
+      const now = Date.now();
+      // Throttle: at most once every 500ms to avoid flooding DB
+      if (now - lastMarkReadRef.current < 500) return;
+      lastMarkReadRef.current = now;
       await markMessagesRead(id, user.id);
-      // After marking read in DB, refresh the unread badge immediately.
-      // refreshUnread does an optimistic clear first, then re-queries DB.
+      // Optimistic: clear badge immediately, then confirm from DB
       refreshUnread();
-    }, 150);
+    };
+
+    if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
+    markReadTimerRef.current = setTimeout(doMark, 80);
+
     return () => {
       if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
     };
+  // Re-run whenever unread status changes, and on mount (id/user changes)
   }, [hasUnreadFromOther, id, user?.id]);
 
   useEffect(() => {
@@ -159,8 +167,9 @@ export default function ChatScreen() {
     setText('');
 
     // Optimistic: show message instantly before DB confirms
+    const tempId = `temp_${Date.now()}`;
     const tempMsg: import('@/services/chatService').Message = {
-      id: `temp_${Date.now()}`,
+      id: tempId,
       conversation_id: id,
       sender_id: user?.id ?? '',
       content,
@@ -169,12 +178,20 @@ export default function ChatScreen() {
     };
     appendMessage(tempMsg);
 
-    const { data: sent, error } = await sendMessage(id, content);
+    const { data: sent, recipientId, error } = await sendMessage(id, content);
     if (error) {
       showAlert(isAr ? 'خطأ' : 'Error', error);
     } else {
-      // Replace temp with real message via silent poll
+      // Replace temp with confirmed DB message
+      if (sent) updateMessage(tempId, sent);
+      // Reconcile with DB silently
       pollSilent();
+      // Send push notification to the other party (fire-and-forget)
+      if (recipientId) {
+        const senderDisplayName =
+          user?.username || user?.email?.split('@')[0] || 'رسالة جديدة';
+        notifyRecipient(recipientId, senderDisplayName, content);
+      }
     }
     setSending(false);
     // Clear typing indicator after send

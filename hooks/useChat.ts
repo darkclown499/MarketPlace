@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
-import { fetchMessages, fetchMyConversations, Message, Conversation } from '@/services/chatService';
+import { fetchMessages, fetchMyConversations, Message, Conversation, savePushToken } from '@/services/chatService';
 import { getSupabaseClient } from '@/template';
 import { CHAT_POLL_INTERVAL, READ_RECEIPT_INTERVAL } from '@/constants/config';
 
@@ -10,14 +10,11 @@ try {
   Notifications = require('expo-notifications');
 } catch (_) {}
 
-/** Request push notification permissions (call once on app startup) */
+/** Request push notification permissions and register/save device push token */
 export async function requestNotificationPermissions(): Promise<void> {
   if (!Notifications || Platform.OS === 'web') return;
   try {
-    const { status } = await Notifications.getPermissionsAsync();
-    if (status !== 'granted') {
-      await Notifications.requestPermissionsAsync();
-    }
+    // Configure notification handler
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: true,
@@ -25,10 +22,30 @@ export async function requestNotificationPermissions(): Promise<void> {
         shouldSetBadge: true,
       }),
     });
+
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') return;
+
+    // Get Expo push token and persist it to the user's profile
+    try {
+      const tokenData = await Notifications.getExpoPushTokenAsync({
+        projectId: undefined, // uses app.json projectId automatically
+      });
+      if (tokenData?.data) {
+        await savePushToken(tokenData.data);
+      }
+    } catch (_) {
+      // Token registration can fail in simulators/emulators — not critical
+    }
   } catch (_) {}
 }
 
-/** Fire a local notification for a new message */
+/** Fire a local notification for a new message (in-app badge/banner when app is in foreground) */
 async function notifyNewMessage(senderName: string, preview: string): Promise<void> {
   if (!Notifications || Platform.OS === 'web') return;
   try {
@@ -43,33 +60,40 @@ async function notifyNewMessage(senderName: string, preview: string): Promise<vo
   } catch (_) {}
 }
 
+// ─── useMessages ───────────────────────────────────────────────────────────────
+
 export function useMessages(conversationId: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Silent background poll — never shows spinner
+  /** Silent background poll — never shows spinner */
   const pollSilent = useCallback(async () => {
     if (!conversationId) return;
     const { data } = await fetchMessages(conversationId);
-    setMessages(data);
+    if (data.length > 0) setMessages(data);
   }, [conversationId]);
 
-  // Manual pull-to-refresh — shows refreshing indicator
+  /** Manual pull-to-refresh — shows refreshing spinner */
   const reload = useCallback(async () => {
     setRefreshing(true);
-    await pollSilent();
+    const { data } = await fetchMessages(conversationId);
+    setMessages(data);
     setRefreshing(false);
-  }, [pollSilent]);
+  }, [conversationId]);
 
-  // Optimistic append: add message instantly to UI, then reconcile with DB
+  /** Optimistic append: add message instantly before DB confirms */
   const appendMessage = useCallback((msg: Message) => {
     setMessages(prev => {
-      // Avoid duplicates if poll already fetched it
       if (prev.find(m => m.id === msg.id)) return prev;
       return [...prev, msg];
     });
+  }, []);
+
+  /** Update a message in-place (e.g. replace temp with real after send) */
+  const updateMessage = useCallback((tempId: string, real: Message) => {
+    setMessages(prev => prev.map(m => m.id === tempId ? real : m));
   }, []);
 
   useEffect(() => {
@@ -79,15 +103,17 @@ export function useMessages(conversationId: string) {
       setMessages(data);
       setInitialLoading(false);
     });
-    // Background polling — use shorter interval so read receipts appear quickly
+    // Fast background polling for read-receipts and new messages
     intervalRef.current = setInterval(pollSilent, READ_RECEIPT_INTERVAL);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [conversationId]);
 
-  return { messages, loading: initialLoading, refreshing, reload, pollSilent, appendMessage };
+  return { messages, loading: initialLoading, refreshing, reload, pollSilent, appendMessage, updateMessage };
 }
+
+// ─── useConversations ──────────────────────────────────────────────────────────
 
 export function useConversations() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -96,57 +122,67 @@ export function useConversations() {
   const prevUnreadRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /** Query the current true unread count from DB and update state */
-  const fetchAndSetUnread = useCallback(async (supabase: any, user: any): Promise<number> => {
+  /** Set badge count on app icon */
+  const setBadge = useCallback(async (count: number) => {
+    if (!Notifications || Platform.OS === 'web') return;
+    try { await Notifications.setBadgeCountAsync(count); } catch (_) {}
+  }, []);
+
+  /** Query the actual unread count from DB */
+  const fetchUnreadCount = useCallback(async (): Promise<number> => {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return 0;
     const { count } = await supabase
       .from('messages')
       .select('id', { count: 'exact', head: true })
       .is('read_at', null)
       .neq('sender_id', user.id);
-    const newCount = count ?? 0;
-    setUnreadCount(newCount);
-    prevUnreadRef.current = newCount;
-    if (Notifications && Platform.OS !== 'web') {
-      try { await Notifications.setBadgeCountAsync(newCount); } catch (_) {}
-    }
-    return newCount;
+    return count ?? 0;
   }, []);
 
   /**
    * Called from chat screen right after markMessagesRead.
-   * Optimistically clears the badge immediately, then confirms with DB.
+   * Optimistically clears badge to 0 immediately, then re-queries DB
+   * to get the true count (other conversations may still have unread).
    */
   const refreshUnread = useCallback(async () => {
-    // Optimistic: set to 0 immediately for instant UI feedback
+    // Optimistic: instant UI clear
     setUnreadCount(0);
     prevUnreadRef.current = 0;
-    if (Notifications && Platform.OS !== 'web') {
-      try { await Notifications.setBadgeCountAsync(0); } catch (_) {}
-    }
-    // Then confirm the real count from DB (may be > 0 if other convs have unread)
+    await setBadge(0);
+
+    // Confirm from DB (might be > 0 if other conversations have unread)
     try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      await fetchAndSetUnread(supabase, user);
+      const real = await fetchUnreadCount();
+      setUnreadCount(real);
+      prevUnreadRef.current = real;
+      await setBadge(real);
     } catch (_) {}
-  }, [fetchAndSetUnread]);
+  }, [fetchUnreadCount, setBadge]);
 
-  const load = async (showSpinner = false) => {
+  const load = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
-    const { data } = await fetchMyConversations();
-    setConversations(data);
-    if (showSpinner) setLoading(false);
 
-    // Compute unread count
     try {
+      const [convResult] = await Promise.all([fetchMyConversations()]);
+      setConversations(convResult.data);
+      if (showSpinner) setLoading(false);
+
+      // Unread count
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setUnreadCount(0); prevUnreadRef.current = 0; return; }
+      if (!user) { setUnreadCount(0); return; }
 
-      const newCount = await fetchAndSetUnread(supabase, user);
+      const { count } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .is('read_at', null)
+        .neq('sender_id', user.id);
 
-      // If unread count increased, fire a local push notification
+      const newCount = count ?? 0;
+
+      // Local notification when new unread messages arrive
       if (newCount > prevUnreadRef.current && prevUnreadRef.current >= 0) {
         try {
           const { data: latestMsgs } = await supabase
@@ -160,24 +196,34 @@ export function useConversations() {
           if (latestMsgs && latestMsgs.length > 0) {
             const msg = latestMsgs[0] as any;
             const profile = msg['user_profiles'];
-            const senderName = profile?.username || profile?.email?.split('@')[0] || 'New Message';
+            const senderName = profile?.username || profile?.email?.split('@')[0] || 'رسالة جديدة';
             const preview = msg.content?.substring(0, 80) || '...';
             await notifyNewMessage(senderName, preview);
           }
         } catch (_) {}
       }
+
+      setUnreadCount(newCount);
+      prevUnreadRef.current = newCount;
+      await setBadge(newCount);
     } catch {
-      setUnreadCount(0);
+      if (showSpinner) setLoading(false);
     }
-  };
+  }, [setBadge]);
 
   useEffect(() => {
-    load(true); // Show spinner only on first load
-    intervalRef.current = setInterval(() => load(false), CHAT_POLL_INTERVAL); // Silent polls
+    load(true);
+    intervalRef.current = setInterval(() => load(false), CHAT_POLL_INTERVAL);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, []);
+  }, [load]);
 
-  return { conversations, loading, reload: () => load(true), unreadCount, refreshUnread };
+  return {
+    conversations,
+    loading,
+    reload: () => load(true),
+    unreadCount,
+    refreshUnread,
+  };
 }
