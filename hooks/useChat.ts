@@ -45,25 +45,39 @@ async function notifyNewMessage(senderName: string, preview: string): Promise<vo
 
 export function useMessages(conversationId: string) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const load = async () => {
+  // Silent background poll — never shows spinner
+  const pollSilent = useCallback(async () => {
+    if (!conversationId) return;
     const { data } = await fetchMessages(conversationId);
     setMessages(data);
-    setLoading(false);
-  };
+  }, [conversationId]);
+
+  // Manual pull-to-refresh — shows refreshing indicator
+  const reload = useCallback(async () => {
+    setRefreshing(true);
+    await pollSilent();
+    setRefreshing(false);
+  }, [pollSilent]);
 
   useEffect(() => {
     if (!conversationId) return;
-    load();
-    intervalRef.current = setInterval(load, CHAT_POLL_INTERVAL);
+    // Initial load
+    fetchMessages(conversationId).then(({ data }) => {
+      setMessages(data);
+      setInitialLoading(false);
+    });
+    // Background polling (silent)
+    intervalRef.current = setInterval(pollSilent, CHAT_POLL_INTERVAL);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [conversationId]);
 
-  return { messages, loading, reload: load };
+  return { messages, loading: initialLoading, refreshing, reload };
 }
 
 export function useConversations() {
@@ -98,11 +112,11 @@ export function useConversations() {
     }
   };
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (showSpinner = false) => {
+    if (showSpinner) setLoading(true);
     const { data } = await fetchMyConversations();
     setConversations(data);
-    setLoading(false);
+    if (showSpinner) setLoading(false);
 
     // Compute unread count
     try {
@@ -152,12 +166,12 @@ export function useConversations() {
   };
 
   useEffect(() => {
-    load();
-    intervalRef.current = setInterval(load, CHAT_POLL_INTERVAL);
+    load(true); // Show spinner only on first load
+    intervalRef.current = setInterval(() => load(false), CHAT_POLL_INTERVAL); // Silent polls
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
 
-  return { conversations, loading, reload: load, unreadCount, refreshUnread };
+  return { conversations, loading, reload: () => load(true), unreadCount, refreshUnread };
 }

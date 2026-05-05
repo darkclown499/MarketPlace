@@ -77,7 +77,7 @@ export default function ChatScreen() {
   const [otherTyping, setOtherTyping] = useState(false);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList>(null);
-  const { messages, loading, reload } = useMessages(id);
+  const { messages, loading, refreshing, reload } = useMessages(id);
   const { refreshUnread } = useConversations();
 
   useEffect(() => {
@@ -125,12 +125,20 @@ export default function ChatScreen() {
     };
   }, [id, user?.id, conversation]);
 
-  // Mark all incoming messages as read whenever the screen is open and messages change
+  // Mark incoming messages as read whenever the screen is open and messages change.
+  // Use a small debounce so we don't spam the DB on every poll tick.
+  const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!id || !user) return;
-    markMessagesRead(id, user.id)
-      .then(() => refreshUnread())
-      .catch(() => {});
+    if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
+    markReadTimerRef.current = setTimeout(() => {
+      markMessagesRead(id, user.id)
+        .then(() => refreshUnread())
+        .catch(() => {});
+    }, 300);
+    return () => {
+      if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
+    };
   }, [messages.length, id, user?.id]);
 
   useEffect(() => {
@@ -228,7 +236,7 @@ export default function ChatScreen() {
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
-                refreshing={loading}
+                refreshing={refreshing}
                 onRefresh={reload}
                 tintColor={colors.primary}
                 colors={[colors.primary]}
