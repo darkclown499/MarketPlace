@@ -27,8 +27,24 @@ async function sendTwilioSMS(to: string, body: string): Promise<void> {
     body: params.toString(),
   });
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Twilio error: ${err}`);
+    const errText = await response.text();
+    let friendlyMessage = 'Failed to send SMS. Please try again.';
+    try {
+      const parsed = JSON.parse(errText);
+      const code = parsed?.code;
+      const msg = parsed?.message ?? '';
+      if (code === 21408) {
+        friendlyMessage = 'SMS to this region is not enabled on the Twilio account. Please enable geographic permissions for Palestine (+970) and Israel (+972) in the Twilio Console under Messaging → Settings → Geo Permissions.';
+      } else if (code === 21211) {
+        friendlyMessage = 'Invalid phone number. Please check and try again.';
+      } else if (code === 21614) {
+        friendlyMessage = 'This number is not capable of receiving SMS messages.';
+      } else if (msg) {
+        friendlyMessage = msg;
+      }
+    } catch { }
+    console.error('Twilio error:', errText);
+    throw new Error(friendlyMessage);
   }
 }
 
