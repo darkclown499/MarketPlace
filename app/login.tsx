@@ -1,12 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Pressable,
+  View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Pressable, ActivityIndicator, Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth, useAlert } from '@/template';
 import { getSupabaseClient } from '@/template';
 import { FunctionsHttpError } from '@supabase/supabase-js';
+import { useRouter } from 'expo-router';
 import { Button, Input } from '@/components';
 import { Spacing, FontSize, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
@@ -45,6 +46,8 @@ export default function LoginScreen() {
   const [smsSent, setSmsSent] = useState(false);
   const [smsLoading, setSmsLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const router = useRouter();
 
   const togglePassword = useCallback(() => setShowPassword(v => !v), []);
   const toggleConfirmPassword = useCallback(() => setShowConfirmPassword(v => !v), []);
@@ -54,9 +57,10 @@ export default function LoginScreen() {
   // ── Email Login ──
   const handleLogin = async () => {
     if (!email.trim() || !password) return showAlert(t.missingFields, t.fillAllFields);
-    if (operationLoading) return;
-    const { error } = await signInWithPassword(email.trim().toLowerCase(), password);
-    if (error) showAlert(t.loginFailed, error);
+    if (operationLoading || verifying) return;
+    const { error, user } = await signInWithPassword(email.trim().toLowerCase(), password);
+    if (error) return showAlert(t.loginFailed, error);
+    if (user) router.replace('/(tabs)');
   };
 
   // ── Email Register: Send OTP ──
@@ -73,8 +77,15 @@ export default function LoginScreen() {
   // ── Email Register: Verify OTP ──
   const handleVerifyOTP = async () => {
     if (!otp || otp.length < 4) return showAlert(t.enterCode, t.enterCodeMsg);
-    const { error } = await verifyOTPAndLogin(email.trim(), otp.trim(), { password });
-    if (error) showAlert(t.verificationFailed, error);
+    if (verifying) return;
+    setVerifying(true);
+    try {
+      const { error, user } = await verifyOTPAndLogin(email.trim(), otp.trim(), { password });
+      if (error) { showAlert(t.verificationFailed, error); return; }
+      if (user) router.replace('/(tabs)');
+    } finally {
+      setVerifying(false);
+    }
   };
 
   // ── Helper: extract edge function error message ──
@@ -137,6 +148,7 @@ export default function LoginScreen() {
     if (!smsOtp || smsOtp.length < 4) {
       return showAlert(isAr ? 'أدخل الرمز' : 'Enter code', isAr ? 'يرجى إدخال رمز التحقق' : 'Please enter the verification code.');
     }
+    if (smsLoading) return;
     setSmsLoading(true);
     try {
       const supabase = getSupabaseClient();
@@ -153,11 +165,11 @@ export default function LoginScreen() {
         return;
       }
       if (data?.session) {
-        // Set the session in Supabase client
         await supabase.auth.setSession({
           access_token: data.session.access_token,
           refresh_token: data.session.refresh_token,
         });
+        router.replace('/(tabs)');
       }
     } catch (e: any) {
       showAlert(isAr ? 'خطأ' : 'Error', e.message ?? 'Verification failed');
@@ -168,8 +180,21 @@ export default function LoginScreen() {
 
   const resetSms = () => { setSmsSent(false); setSmsOtp(''); };
 
+  const isBlocking = verifying || smsLoading;
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      {/* Full-screen loading overlay prevents double-clicks during verification */}
+      <Modal visible={isBlocking} transparent animationType="none" statusBarTranslucent>
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color="#0A6E5C" />
+            <Text style={styles.loadingText}>
+              {isAr ? 'جارٍ التحقق...' : 'Verifying...'}
+            </Text>
+          </View>
+        </View>
+      </Modal>
       <ScrollView
         style={[styles.scroll, { backgroundColor: colors.primary }]}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 32 }]}
@@ -612,4 +637,17 @@ const styles = StyleSheet.create({
   },
   googleG: { color: '#fff', fontSize: 13, fontWeight: '900', lineHeight: 17 },
   googleBtnText: { color: '#1a1a1a', fontSize: FontSize.md, fontWeight: '700' },
+
+  // Loading overlay
+  loadingOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  loadingBox: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 28,
+    alignItems: 'center', gap: 14, minWidth: 140,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18, shadowRadius: 10, elevation: 8,
+  },
+  loadingText: { fontSize: FontSize.md, fontWeight: '600', color: '#1a1a1a' },
 });
