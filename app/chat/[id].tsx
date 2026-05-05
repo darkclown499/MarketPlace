@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TextInput, Pressable,
+  View, Text, StyleSheet, FlatList, TextInput, Pressable, Modal,
   KeyboardAvoidingView, Platform, ActivityIndicator, RefreshControl, Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
