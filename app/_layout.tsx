@@ -7,7 +7,7 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { requestNotificationPermissions } from '@/hooks/useChat';
 
-// Clear stale Supabase tokens from browser localStorage to prevent
+// Clear stale/expired Supabase tokens from browser localStorage to prevent
 // "Invalid Refresh Token: Refresh Token Not Found" on startup.
 if (Platform.OS === 'web' && typeof window !== 'undefined') {
   try {
@@ -16,12 +16,24 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const key = localStorage.key(i);
       if (key && key.includes('supabase')) keysToRemove.push(key);
     }
-    // Only remove if the token looks corrupted (error would have been thrown)
-    // We do a passive check — Supabase will re-auth naturally after clearing.
+    // Check if the stored session has an expired or missing refresh token
     const sessionKey = keysToRemove.find(k => k.includes('auth-token'));
     if (sessionKey) {
       const raw = localStorage.getItem(sessionKey);
-      if (!raw) keysToRemove.forEach(k => localStorage.removeItem(k));
+      let shouldClear = !raw;
+      if (raw && !shouldClear) {
+        try {
+          const parsed = JSON.parse(raw);
+          // Clear if no refresh_token, or if access token is clearly expired
+          const hasRefreshToken = !!parsed?.refresh_token;
+          const expiresAt: number = parsed?.expires_at ?? 0;
+          const isExpired = expiresAt > 0 && expiresAt * 1000 < Date.now();
+          if (!hasRefreshToken || isExpired) shouldClear = true;
+        } catch {
+          shouldClear = true;
+        }
+      }
+      if (shouldClear) keysToRemove.forEach(k => localStorage.removeItem(k));
     }
   } catch (_) {}
 }
