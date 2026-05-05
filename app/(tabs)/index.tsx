@@ -293,10 +293,6 @@ export default function HomeScreen() {
                   />
                   <View style={styles.bannerOverlay} />
                   <View style={[styles.bannerContent, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-                    <View style={[styles.bannerTag, { backgroundColor: colors.accent }]}>
-                      <MaterialIcons name="local-fire-department" size={11} color="#fff" />
-                      <Text style={styles.bannerTagText}>{isAr ? 'مميز' : 'Featured'}</Text>
-                    </View>
                     <Text style={[styles.bannerTitle, { textAlign: isRTL ? 'right' : 'left' }]}>
                       {currentBanner.title}
                     </Text>
@@ -305,11 +301,6 @@ export default function HomeScreen() {
                         {currentBanner.subtitle}
                       </Text>
                     ) : null}
-                    <Pressable style={[styles.bannerCta, { backgroundColor: colors.accent }]}>
-                      {isRTL ? <MaterialIcons name="arrow-back" size={13} color="#fff" /> : null}
-                      <Text style={styles.bannerCtaText}>{isAr ? 'اكتشف الآن' : 'Explore Now'}</Text>
-                      {!isRTL ? <MaterialIcons name="arrow-forward" size={13} color="#fff" /> : null}
-                    </Pressable>
                   </View>
                   {banners.length > 1 ? (
                     <View style={styles.bannerDots}>
