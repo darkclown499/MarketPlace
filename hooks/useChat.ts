@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { fetchMessages, fetchMyConversations, Message, Conversation } from '@/services/chatService';
 import { getSupabaseClient } from '@/template';
-import { CHAT_POLL_INTERVAL } from '@/constants/config';
+import { CHAT_POLL_INTERVAL, READ_RECEIPT_INTERVAL } from '@/constants/config';
 
 // Lazy-import expo-notifications to avoid crashing on web
 let Notifications: any = null;
@@ -79,8 +79,8 @@ export function useMessages(conversationId: string) {
       setMessages(data);
       setInitialLoading(false);
     });
-    // Background polling (silent)
-    intervalRef.current = setInterval(pollSilent, CHAT_POLL_INTERVAL);
+    // Background polling — use shorter interval so read receipts appear quickly
+    intervalRef.current = setInterval(pollSilent, READ_RECEIPT_INTERVAL);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
@@ -95,37 +95,42 @@ export function useConversations() {
   const [unreadCount, setUnreadCount] = useState(0);
   const prevUnreadRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Prevents the background poll from overwriting the count right after markRead
-  const suppressPollRef = useRef(false);
 
-  /** Recompute only the unread badge count without refetching conversations */
+  /** Query the current true unread count from DB and update state */
+  const fetchAndSetUnread = useCallback(async (supabase: any, user: any): Promise<number> => {
+    const { count } = await supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .is('read_at', null)
+      .neq('sender_id', user.id);
+    const newCount = count ?? 0;
+    setUnreadCount(newCount);
+    prevUnreadRef.current = newCount;
+    if (Notifications && Platform.OS !== 'web') {
+      try { await Notifications.setBadgeCountAsync(newCount); } catch (_) {}
+    }
+    return newCount;
+  }, []);
+
+  /**
+   * Called from chat screen right after markMessagesRead.
+   * Optimistically clears the badge immediately, then confirms with DB.
+   */
   const refreshUnread = useCallback(async () => {
-    suppressPollRef.current = true; // Block next poll from overwriting
+    // Optimistic: set to 0 immediately for instant UI feedback
+    setUnreadCount(0);
+    prevUnreadRef.current = 0;
+    if (Notifications && Platform.OS !== 'web') {
+      try { await Notifications.setBadgeCountAsync(0); } catch (_) {}
+    }
+    // Then confirm the real count from DB (may be > 0 if other convs have unread)
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setUnreadCount(0); prevUnreadRef.current = 0; suppressPollRef.current = false; return; }
-
-      const { count } = await supabase
-        .from('messages')
-        .select('id', { count: 'exact', head: true })
-        .is('read_at', null)
-        .neq('sender_id', user.id);
-
-      const newCount = count ?? 0;
-      prevUnreadRef.current = newCount;
-      setUnreadCount(newCount);
-      // Update app badge count
-      if (Notifications && Platform.OS !== 'web') {
-        try { await Notifications.setBadgeCountAsync(newCount); } catch (_) {}
-      }
-    } catch {
-      setUnreadCount(0);
-    } finally {
-      // Re-enable poll after a short grace period
-      setTimeout(() => { suppressPollRef.current = false; }, 2000);
-    }
-  }, []);
+      if (!user) return;
+      await fetchAndSetUnread(supabase, user);
+    } catch (_) {}
+  }, [fetchAndSetUnread]);
 
   const load = async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
@@ -133,26 +138,16 @@ export function useConversations() {
     setConversations(data);
     if (showSpinner) setLoading(false);
 
-    // Skip count update if refreshUnread just ran (prevents overwrite race)
-    if (suppressPollRef.current) return;
-
     // Compute unread count
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setUnreadCount(0); prevUnreadRef.current = 0; return; }
 
-      const { count } = await supabase
-        .from('messages')
-        .select('id', { count: 'exact', head: true })
-        .is('read_at', null)
-        .neq('sender_id', user.id);
-
-      const newCount = count ?? 0;
+      const newCount = await fetchAndSetUnread(supabase, user);
 
       // If unread count increased, fire a local push notification
       if (newCount > prevUnreadRef.current && prevUnreadRef.current >= 0) {
-        // Fetch the latest unread message for preview
         try {
           const { data: latestMsgs } = await supabase
             .from('messages')
@@ -170,13 +165,6 @@ export function useConversations() {
             await notifyNewMessage(senderName, preview);
           }
         } catch (_) {}
-      }
-
-      prevUnreadRef.current = newCount;
-      setUnreadCount(newCount);
-      // Update app badge count
-      if (Notifications && Platform.OS !== 'web') {
-        try { await Notifications.setBadgeCountAsync(newCount); } catch (_) {}
       }
     } catch {
       setUnreadCount(0);

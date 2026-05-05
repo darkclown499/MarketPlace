@@ -125,21 +125,26 @@ export default function ChatScreen() {
     };
   }, [id, user?.id, conversation]);
 
-  // Mark incoming messages as read whenever the screen is open and messages change.
-  // Use a small debounce so we don't spam the DB on every poll tick.
+  // Compute whether there are unread messages from the other person.
+  // This drives the mark-read effect below — avoids spamming DB on every poll
+  // when there's nothing to mark, and fires reliably whenever new unread arrive.
+  const hasUnreadFromOther = messages.some(m => m.sender_id !== user?.id && !m.read_at);
+
   const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!id || !user) return;
+    if (!id || !user || !hasUnreadFromOther) return;
+    // Debounce slightly so we don't fire multiple times in quick succession
     if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
-    markReadTimerRef.current = setTimeout(() => {
-      markMessagesRead(id, user.id)
-        .then(() => refreshUnread())
-        .catch(() => {});
-    }, 300);
+    markReadTimerRef.current = setTimeout(async () => {
+      await markMessagesRead(id, user.id);
+      // After marking read in DB, refresh the unread badge immediately.
+      // refreshUnread does an optimistic clear first, then re-queries DB.
+      refreshUnread();
+    }, 150);
     return () => {
       if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
     };
-  }, [messages.length, id, user?.id]);
+  }, [hasUnreadFromOther, id, user?.id]);
 
   useEffect(() => {
     if (messages.length > 0) {
