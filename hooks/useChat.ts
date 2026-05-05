@@ -73,6 +73,27 @@ export function useConversations() {
   const prevUnreadRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  /** Recompute only the unread badge count without refetching conversations */
+  const refreshUnread = async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setUnreadCount(0); prevUnreadRef.current = 0; return; }
+
+      const { count } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .is('read_at', null)
+        .neq('sender_id', user.id);
+
+      const newCount = count ?? 0;
+      prevUnreadRef.current = newCount;
+      setUnreadCount(newCount);
+    } catch {
+      setUnreadCount(0);
+    }
+  };
+
   const load = async () => {
     setLoading(true);
     const { data } = await fetchMyConversations();
@@ -130,5 +151,5 @@ export function useConversations() {
     };
   }, []);
 
-  return { conversations, loading, reload: load, unreadCount };
+  return { conversations, loading, reload: load, unreadCount, refreshUnread };
 }

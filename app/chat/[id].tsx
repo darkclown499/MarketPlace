@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth, useAlert } from '@/template';
-import { useMessages } from '@/hooks/useChat';
+import { useMessages, useConversations } from '@/hooks/useChat';
 import { fetchConversationById, sendMessage, markMessagesRead, Conversation } from '@/services/chatService';
 import { Spacing, FontSize, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
@@ -41,16 +41,23 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList>(null);
   const { messages, loading, reload } = useMessages(id);
+  const { refreshUnread } = useConversations();
 
   useEffect(() => {
     if (id) fetchConversationById(id).then(({ data }) => setConversation(data));
   }, [id]);
 
+  // Mark all incoming messages as read whenever the screen is open and messages change
+  useEffect(() => {
+    if (!id || !user) return;
+    markMessagesRead(id, user.id)
+      .then(() => refreshUnread())
+      .catch(() => {});
+  }, [messages.length, id, user?.id]);
+
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
-      // Mark incoming messages as read
-      if (user && id) markMessagesRead(id, user.id).catch(() => {});
     }
   }, [messages.length]);
 
