@@ -49,8 +49,8 @@ const OPTIONS: PromotionOption[] = [
     descEn: 'Display your banner prominently on the home screen carousel.',
     descAr: 'اعرض بانرك بشكل بارز في شريط الصفحة الرئيسية.',
     packages: [
-      { labelEn: '7 Days Banner', labelAr: 'بانر 7 أيام', price: '700 ₪' },
-      { labelEn: '14 Days Banner', labelAr: 'بانر 14 يوم', price: '1000 ₪', popular: true },
+      { labelEn: '7 Days Banner', labelAr: 'بانر 7 أيام', price: '300 ₪' },
+      { labelEn: '14 Days Banner', labelAr: 'بانر 14 يوم', price: '500 ₪', popular: true },
     ],
     gradient: ['#D97706', '#F59E0B'],
     accentColor: '#D97706',
