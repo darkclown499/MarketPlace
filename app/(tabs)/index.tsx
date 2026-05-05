@@ -48,15 +48,26 @@ function injectSponsored(ads: Ad[]): (Ad | { __sponsored: true; id: string })[] 
 function sortAds(ads: Ad[], sortBy: SortOption): Ad[] {
   const now = Date.now();
   const copy = [...ads];
+  const boostedScore = (ad: Ad) => (ad.boosted_until && new Date(ad.boosted_until).getTime() > now ? 1 : 0);
+
   switch (sortBy) {
-    case 'price_asc': return copy.sort((a, b) => a.price - b.price);
-    case 'price_desc': return copy.sort((a, b) => b.price - a.price);
-    case 'boosted': return copy.sort((a, b) => {
-      const aB = a.boosted_until && new Date(a.boosted_until).getTime() > now ? 1 : 0;
-      const bB = b.boosted_until && new Date(b.boosted_until).getTime() > now ? 1 : 0;
-      return bB - aB;
-    });
-    default: return copy.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    case 'price_asc':
+      return copy.sort((a, b) => {
+        const bd = boostedScore(b) - boostedScore(a);
+        return bd !== 0 ? bd : a.price - b.price;
+      });
+    case 'price_desc':
+      return copy.sort((a, b) => {
+        const bd = boostedScore(b) - boostedScore(a);
+        return bd !== 0 ? bd : b.price - a.price;
+      });
+    case 'boosted':
+      return copy.sort((a, b) => boostedScore(b) - boostedScore(a));
+    default:
+      return copy.sort((a, b) => {
+        const bd = boostedScore(b) - boostedScore(a);
+        return bd !== 0 ? bd : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
   }
 }
 
