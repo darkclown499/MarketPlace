@@ -117,14 +117,19 @@ export default function BetaWarningScreen() {
 
         {/* ── WhatsApp Button ── */}
         <Pressable
-          style={({ pressed }) => [styles.waBtn, { opacity: pressed ? 0.85 : 1 }]}
+          style={({ pressed }) => [styles.waBtn, { opacity: pressed ? 0.82 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}
           onPress={handleWhatsApp}
         >
           <View style={styles.waIconWrap}>
-            <MaterialIcons name="chat" size={20} color="#25D366" />
+            <MaterialIcons name="chat-bubble" size={22} color="#fff" />
           </View>
-          <Text style={styles.waBtnText}>تواصل معنا على واتساب</Text>
-          <MaterialIcons name="open-in-new" size={16} color="rgba(255,255,255,0.7)" />
+          <View style={styles.waBtnContent}>
+            <Text style={styles.waBtnTitle}>تواصل معنا</Text>
+            <Text style={styles.waBtnSub}>واتساب · 972559886886+</Text>
+          </View>
+          <View style={styles.waArrow}>
+            <MaterialIcons name="arrow-forward-ios" size={14} color="rgba(255,255,255,0.8)" />
+          </View>
         </Pressable>
 
         {/* ── Continue Button ── */}
@@ -240,28 +245,47 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    backgroundColor: '#128C7E',
+    gap: Spacing.md,
+    backgroundColor: '#075E54',
     borderRadius: Radius.xl,
-    paddingVertical: 16,
-    shadowColor: '#128C7E',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 6,
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.lg,
+    shadowColor: '#075E54',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 7,
   },
   waIconWrap: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: '#fff',
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#25D366',
     alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#25D366',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  waBtnText: {
+  waBtnContent: {
+    flex: 1,
+    gap: 2,
+  },
+  waBtnTitle: {
     color: '#fff',
     fontSize: FontSize.md,
     fontWeight: '700',
-    flex: 1,
-    textAlign: 'center',
+    textAlign: 'right',
+  },
+  waBtnSub: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: FontSize.xs,
+    fontWeight: '500',
+    textAlign: 'right',
+  },
+  waArrow: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
   },
 
   // Continue button
