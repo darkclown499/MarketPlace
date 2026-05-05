@@ -8,7 +8,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth, useAlert } from '@/template';
 import { useMessages, useConversations } from '@/hooks/useChat';
-import { fetchConversationById, sendMessage, markMessagesRead, updateTypingIndicator, fetchTypingStatus, notifyRecipient, Conversation } from '@/services/chatService';
+import { fetchConversationById, sendMessage, markMessagesRead, updateTypingIndicator, fetchTypingStatus, notifyRecipient, deleteConversation, Conversation } from '@/services/chatService';
+import { updateAdStatus } from '@/services/adsService';
 import { Spacing, FontSize, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -75,6 +76,8 @@ export default function ChatScreen() {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList>(null);
   const { messages, loading, refreshing, reload, pollSilent, appendMessage, updateMessage } = useMessages(id);
@@ -203,6 +206,78 @@ export default function ChatScreen() {
   };
 
   const isBuyer = conversation?.buyer_id === user?.id;
+  const isSeller = conversation?.seller_id === user?.id;
+  const adStatus = conversation?.ads?.status;
+  const adId = conversation?.ad_id;
+
+  // ── Mark as Sold / Cancel Sale ──────────────────────────────────────────
+  const handleMarkSold = async () => {
+    if (!adId || actionLoading) return;
+    setMenuVisible(false);
+    showAlert(
+      isAr ? 'تأكيد البيع' : 'Confirm Sale',
+      isAr ? 'هل تريد تحديد هذا الإعلان كـ «تم البيع»؟ سيظهر للمشترين أنه غير متاح.' : 'Mark this listing as sold? Buyers will see it as unavailable.',
+      [
+        { text: isAr ? 'إلغاء' : 'Cancel', style: 'cancel' },
+        {
+          text: isAr ? 'تم البيع ✓' : 'Mark Sold ✓',
+          onPress: async () => {
+            setActionLoading(true);
+            const { error } = await updateAdStatus(adId, 'sold');
+            setActionLoading(false);
+            if (error) {
+              showAlert(isAr ? 'خطأ' : 'Error', error);
+            } else {
+              setConversation(prev => prev ? { ...prev, ads: { ...prev.ads, title: prev.ads?.title ?? '', status: 'sold' } } : prev);
+              showAlert(isAr ? 'تم البيع 🎉' : 'Marked as Sold 🎉', isAr ? 'تم تحديث حالة الإعلان بنجاح.' : 'Listing status updated successfully.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleCancelSold = async () => {
+    if (!adId || actionLoading) return;
+    setMenuVisible(false);
+    setActionLoading(true);
+    const { error } = await updateAdStatus(adId, 'active');
+    setActionLoading(false);
+    if (error) {
+      showAlert(isAr ? 'خطأ' : 'Error', error);
+    } else {
+      setConversation(prev => prev ? { ...prev, ads: { ...prev.ads, title: prev.ads?.title ?? '', status: 'active' } } : prev);
+      showAlert(isAr ? 'تم إعادة التفعيل' : 'Listing Reactivated', isAr ? 'الإعلان متاح للبيع مجدداً.' : 'The listing is available again.');
+    }
+  };
+
+  // ── Delete Conversation ────────────────────────────────────────────────
+  const handleDeleteConversation = () => {
+    setMenuVisible(false);
+    showAlert(
+      isAr ? 'حذف المحادثة' : 'Delete Conversation',
+      isAr ? 'سيتم حذف المحادثة وجميع رسائلها بشكل نهائي. هل تريد المتابعة؟' : 'This will permanently delete the conversation and all messages. Continue?',
+      [
+        { text: isAr ? 'إلغاء' : 'Cancel', style: 'cancel' },
+        {
+          text: isAr ? 'حذف' : 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (!id) return;
+            setActionLoading(true);
+            const { error } = await deleteConversation(id);
+            setActionLoading(false);
+            if (error) {
+              showAlert(isAr ? 'خطأ' : 'Error', error);
+            } else {
+              router.replace('/(tabs)/messages');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const otherUser = isBuyer ? conversation?.seller : conversation?.buyer;
   const otherName = otherUser?.username || otherUser?.email?.split('@')[0] || 'User';
   const otherInitial = otherName.charAt(0).toUpperCase();
@@ -257,9 +332,116 @@ export default function ChatScreen() {
                   {' · '}{conversation.ads.title}
                 </Text>
               ) : null}
+              {adStatus === 'sold' ? (
+                <View style={styles.soldPill}>
+                  <Text style={styles.soldPillText}>{isAr ? 'بيع' : 'Sold'}</Text>
+                </View>
+              ) : null}
             </View>
           </View>
+
+          {/* More options button */}
+          <Pressable
+            style={styles.moreBtn}
+            onPress={() => setMenuVisible(true)}
+            hitSlop={8}
+          >
+            {actionLoading
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <MaterialIcons name="more-vert" size={22} color="#fff" />}
+          </Pressable>
         </View>
+
+        {/* ── ACTION MENU MODAL ── */}
+        <Modal
+          visible={menuVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setMenuVisible(false)}
+          statusBarTranslucent
+        >
+          <Pressable style={styles.menuOverlay} onPress={() => setMenuVisible(false)}>
+            <View style={[styles.menuSheet, { backgroundColor: colors.surface }]}>
+              {/* Handle */}
+              <View style={[styles.menuHandle, { backgroundColor: colors.border }]} />
+
+              {/* Title */}
+              <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>
+                {isAr ? 'خيارات المحادثة' : 'Conversation Options'}
+              </Text>
+
+              {/* Sold / Cancel Sale — only for seller */}
+              {isSeller ? (
+                adStatus === 'sold' ? (
+                  <Pressable
+                    style={[styles.menuItem, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
+                    onPress={handleCancelSold}
+                  >
+                    <View style={[styles.menuIconWrap, { backgroundColor: '#FEF3C7' }]}>
+                      <MaterialIcons name="undo" size={20} color="#D97706" />
+                    </View>
+                    <View style={styles.menuItemText}>
+                      <Text style={[styles.menuItemTitle, { color: colors.textPrimary, textAlign: isAr ? 'right' : 'left' }]}>
+                        {isAr ? 'إلغاء البيع' : 'Cancel Sale'}
+                      </Text>
+                      <Text style={[styles.menuItemSub, { color: colors.textMuted, textAlign: isAr ? 'right' : 'left' }]}>
+                        {isAr ? 'إعادة الإعلان نشطاً للبيع مجدداً' : 'Reactivate the listing for sale'}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    style={[styles.menuItem, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
+                    onPress={handleMarkSold}
+                  >
+                    <View style={[styles.menuIconWrap, { backgroundColor: '#DCFCE7' }]}>
+                      <MaterialIcons name="check-circle" size={20} color="#16A34A" />
+                    </View>
+                    <View style={styles.menuItemText}>
+                      <Text style={[styles.menuItemTitle, { color: colors.textPrimary, textAlign: isAr ? 'right' : 'left' }]}>
+                        {isAr ? 'تم البيع ✓' : 'Mark as Sold ✓'}
+                      </Text>
+                      <Text style={[styles.menuItemSub, { color: colors.textMuted, textAlign: isAr ? 'right' : 'left' }]}>
+                        {isAr ? 'أعلم المشترين أن الإعلان غير متاح' : 'Let buyers know this item is taken'}
+                      </Text>
+                    </View>
+                  </Pressable>
+                )
+              ) : null}
+
+              {/* Divider */}
+              <View style={[styles.menuDivider, { backgroundColor: colors.borderLight }]} />
+
+              {/* Delete Conversation */}
+              <Pressable
+                style={[styles.menuItem, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
+                onPress={handleDeleteConversation}
+              >
+                <View style={[styles.menuIconWrap, { backgroundColor: '#FEE2E2' }]}>
+                  <MaterialIcons name="delete-outline" size={20} color="#EF4444" />
+                </View>
+                <View style={styles.menuItemText}>
+                  <Text style={[styles.menuItemTitle, { color: '#EF4444', textAlign: isAr ? 'right' : 'left' }]}>
+                    {isAr ? 'حذف المحادثة' : 'Delete Conversation'}
+                  </Text>
+                  <Text style={[styles.menuItemSub, { color: colors.textMuted, textAlign: isAr ? 'right' : 'left' }]}>
+                    {isAr ? 'حذف نهائي لجميع الرسائل' : 'Permanently remove all messages'}
+                  </Text>
+                </View>
+              </Pressable>
+
+              {/* Cancel */}
+              <Pressable
+                style={[styles.menuCancelBtn, { backgroundColor: colors.background }]}
+                onPress={() => setMenuVisible(false)}
+              >
+                <Text style={[styles.menuCancelText, { color: colors.textPrimary }]}>
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Modal>
 
         {/* ── MESSAGES ── */}
         {loading && messages.length === 0 ? (
@@ -427,6 +609,55 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
   },
+  moreBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  soldPill: {
+    backgroundColor: '#EF4444', borderRadius: 99,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  soldPillText: { color: '#fff', fontSize: 9, fontWeight: '800' },
+
+  // Action Menu
+  menuOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  menuSheet: {
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingHorizontal: Spacing.lg, paddingBottom: 32, paddingTop: 12,
+    gap: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12, shadowRadius: 16, elevation: 20,
+  },
+  menuHandle: {
+    width: 40, height: 4, borderRadius: 2,
+    alignSelf: 'center', marginBottom: Spacing.md,
+  },
+  menuTitle: {
+    fontSize: FontSize.lg, fontWeight: '700',
+    textAlign: 'center', marginBottom: Spacing.sm,
+  },
+  menuItem: {
+    alignItems: 'center', gap: Spacing.md,
+    paddingVertical: 14, paddingHorizontal: 4,
+  },
+  menuIconWrap: {
+    width: 46, height: 46, borderRadius: 23,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  menuItemText: { flex: 1, gap: 3 },
+  menuItemTitle: { fontSize: FontSize.md, fontWeight: '700' },
+  menuItemSub: { fontSize: FontSize.xs, lineHeight: 16 },
+  menuDivider: { height: 1, marginVertical: 6 },
+  menuCancelBtn: {
+    borderRadius: Radius.xl, paddingVertical: 14,
+    alignItems: 'center', justifyContent: 'center',
+    marginTop: Spacing.sm,
+  },
+  menuCancelText: { fontSize: FontSize.md, fontWeight: '700' },
   headerAvatar: {
     width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center',

@@ -8,7 +8,7 @@ export interface Conversation {
   last_message?: string;
   last_message_at: string;
   created_at: string;
-  ads?: { title: string };
+  ads?: { title: string; status?: string; user_id?: string };
   buyer?: { username: string; email: string };
   seller?: { username: string; email: string };
 }
@@ -31,7 +31,7 @@ export async function fetchMyConversations(): Promise<{ data: Conversation[]; er
     .from('conversations')
     .select(`
       *,
-      ads(title),
+      ads(title, status, user_id),
       buyer:user_profiles!conversations_buyer_id_fkey(username, email),
       seller:user_profiles!conversations_seller_id_fkey(username, email)
     `)
@@ -75,7 +75,7 @@ export async function fetchConversationById(id: string): Promise<{ data: Convers
     .from('conversations')
     .select(`
       *,
-      ads(title),
+      ads(title, status, user_id),
       buyer:user_profiles!conversations_buyer_id_fkey(username, email),
       seller:user_profiles!conversations_seller_id_fkey(username, email)
     `)
@@ -200,6 +200,18 @@ export async function fetchTypingStatus(
     buyer_typing_at: data?.buyer_typing_at ?? null,
     seller_typing_at: data?.seller_typing_at ?? null,
   };
+}
+
+/** Delete a conversation and all its messages (CASCADE handles messages) */
+export async function deleteConversation(
+  conversationId: string
+): Promise<{ error: string | null }> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase
+    .from('conversations')
+    .delete()
+    .eq('id', conversationId);
+  return { error: error ? error.message : null };
 }
 
 /** Save or update the Expo push token for the current user */
