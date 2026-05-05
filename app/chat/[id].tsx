@@ -1,17 +1,52 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, Pressable,
-  KeyboardAvoidingView, Platform, ActivityIndicator, RefreshControl,
+  KeyboardAvoidingView, Platform, ActivityIndicator, RefreshControl, Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth, useAlert } from '@/template';
 import { useMessages, useConversations } from '@/hooks/useChat';
-import { fetchConversationById, sendMessage, markMessagesRead, Conversation } from '@/services/chatService';
+import { fetchConversationById, sendMessage, markMessagesRead, updateTypingIndicator, fetchTypingStatus, Conversation } from '@/services/chatService';
 import { Spacing, FontSize, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { useLanguage } from '@/hooks/useLanguage';
+
+/** Animated three-dot typing indicator */
+function TypingDots({ color }: { color: string }) {
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const anim = (dot: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dot, { toValue: -5, duration: 250, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0, duration: 250, useNativeDriver: true }),
+          Animated.delay(500),
+        ])
+      );
+    const a1 = anim(dot1, 0);
+    const a2 = anim(dot2, 160);
+    const a3 = anim(dot3, 320);
+    a1.start(); a2.start(); a3.start();
+    return () => { a1.stop(); a2.stop(); a3.stop(); };
+  }, []);
+
+  return (
+    <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center', paddingVertical: 2 }}>
+      {[dot1, dot2, dot3].map((dot, i) => (
+        <Animated.View
+          key={i}
+          style={[styles.typingDot, { backgroundColor: color, transform: [{ translateY: dot }] }]}
+        />
+      ))}
+    </View>
+  );
+}
 
 function formatTime(dateStr: string) {
   return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -39,6 +74,8 @@ export default function ChatScreen() {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [otherTyping, setOtherTyping] = useState(false);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList>(null);
   const { messages, loading, reload } = useMessages(id);
   const { refreshUnread } = useConversations();
@@ -46,6 +83,47 @@ export default function ChatScreen() {
   useEffect(() => {
     if (id) fetchConversationById(id).then(({ data }) => setConversation(data));
   }, [id]);
+
+  // Poll typing indicator every 2 seconds
+  useEffect(() => {
+    if (!id || !user || !conversation) return;
+    const isBuyer = conversation.buyer_id === user.id;
+    const check = async () => {
+      const status = await fetchTypingStatus(id);
+      const otherAt = isBuyer ? status.seller_typing_at : status.buyer_typing_at;
+      if (otherAt) {
+        const diff = Date.now() - new Date(otherAt).getTime();
+        setOtherTyping(diff < 4000);
+      } else {
+        setOtherTyping(false);
+      }
+    };
+    check();
+    const interval = setInterval(check, 2000);
+    return () => clearInterval(interval);
+  }, [id, user?.id, conversation]);
+
+  const handleTyping = (val: string) => {
+    setText(val);
+    if (!id || !user || !conversation) return;
+    const isBuyer = conversation.buyer_id === user.id;
+    updateTypingIndicator(id, isBuyer, true).catch(() => {});
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => {
+      updateTypingIndicator(id, isBuyer, false).catch(() => {});
+    }, 3000);
+  };
+
+  // Clear typing on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      if (id && user && conversation) {
+        const isBuyer = conversation.buyer_id === user.id;
+        updateTypingIndicator(id, isBuyer, false).catch(() => {});
+      }
+    };
+  }, [id, user?.id, conversation]);
 
   // Mark all incoming messages as read whenever the screen is open and messages change
   useEffect(() => {
@@ -69,6 +147,12 @@ export default function ChatScreen() {
     const { error } = await sendMessage(id, content);
     if (error) showAlert(isAr ? 'خطأ' : 'Error', error);
     setSending(false);
+    // Clear typing indicator after send
+    if (conversation) {
+      const isBuyer = conversation.buyer_id === user?.id;
+      updateTypingIndicator(id!, isBuyer, false).catch(() => {});
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    }
   };
 
   const isBuyer = conversation?.buyer_id === user?.id;
@@ -110,8 +194,17 @@ export default function ChatScreen() {
           <View style={styles.headerInfo}>
             <Text style={[styles.headerName, { textAlign: isAr ? 'right' : 'left' }]} numberOfLines={1}>{otherName}</Text>
             <View style={[styles.onlineRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-              <View style={styles.onlineDot} />
-              <Text style={styles.onlineText}>{isAr ? 'نشط' : 'Active'}</Text>
+              {otherTyping ? (
+                <>
+                  <View style={[styles.onlineDot, { backgroundColor: '#F59E0B' }]} />
+                  <Text style={styles.onlineText}>{isAr ? 'يكتب...' : 'typing...'}</Text>
+                </>
+              ) : (
+                <>
+                  <View style={styles.onlineDot} />
+                  <Text style={styles.onlineText}>{isAr ? 'نشط' : 'Active'}</Text>
+                </>
+              )}
               {conversation?.ads?.title ? (
                 <Text style={styles.headerAd} numberOfLines={1}>
                   {' · '}{conversation.ads.title}
@@ -201,6 +294,18 @@ export default function ChatScreen() {
                 </View>
               );
             }}
+            ListFooterComponent={
+              otherTyping ? (
+                <View style={[styles.typingRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                  <View style={[styles.bubbleAvatar, { backgroundColor: colors.primaryGhost }]}>
+                    <Text style={[styles.bubbleAvatarText, { color: colors.primary }]}>{otherInitial}</Text>
+                  </View>
+                  <View style={[styles.typingBubble, { backgroundColor: colors.surface, ...Shadow.sm }]}>
+                    <TypingDots color={colors.textMuted} />
+                  </View>
+                </View>
+              ) : null
+            }
             ListEmptyComponent={
               <View style={styles.center}>
                 <View style={[styles.emptyIcon, { backgroundColor: colors.surfaceTint }]}>
@@ -235,7 +340,7 @@ export default function ChatScreen() {
             placeholder={t.typeMessage}
             placeholderTextColor={colors.textMuted}
             value={text}
-            onChangeText={setText}
+            onChangeText={handleTyping}
             multiline
             maxLength={500}
           />
@@ -250,7 +355,7 @@ export default function ChatScreen() {
             {sending
               ? <ActivityIndicator color="#fff" size="small" />
               : <MaterialIcons
-                  name={isAr ? 'send' : 'send'}
+                  name="send"
                   size={20}
                   color={text.trim() ? '#fff' : colors.textMuted}
                   style={isAr ? { transform: [{ scaleX: -1 }] } : undefined}
@@ -325,5 +430,11 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 46, height: 46, borderRadius: 23,
     alignItems: 'center', justifyContent: 'center',
+  },
+  typingDot: { width: 7, height: 7, borderRadius: 3.5 },
+  typingRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'flex-end', marginTop: Spacing.sm },
+  typingBubble: {
+    borderRadius: Radius.lg, borderBottomLeftRadius: 4,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
   },
 });

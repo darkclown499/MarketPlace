@@ -53,25 +53,27 @@ export default function LoginScreen() {
 
   // ── Email Login ──
   const handleLogin = async () => {
-    if (!email || !password) return showAlert(t.missingFields, t.fillAllFields);
-    const { error } = await signInWithPassword(email.trim(), password);
+    if (!email.trim() || !password) return showAlert(t.missingFields, t.fillAllFields);
+    if (operationLoading) return;
+    const { error } = await signInWithPassword(email.trim().toLowerCase(), password);
     if (error) showAlert(t.loginFailed, error);
   };
 
   // ── Email Register: Send OTP ──
   const handleSendOTP = async () => {
-    if (!email || !password) return showAlert(t.missingFields, t.fillAllFields);
+    if (!email.trim() || !password) return showAlert(t.missingFields, t.fillAllFields);
     if (password !== confirmPassword) return showAlert(t.passwordMismatch, t.passwordsDontMatch);
     if (password.length < 6) return showAlert(t.weakPassword, t.passwordMin6);
-    const { error } = await sendOTP(email.trim());
+    if (operationLoading) return;
+    const { error } = await sendOTP(email.trim().toLowerCase());
     if (error) return showAlert('Error', error);
     setMode('otp');
   };
 
   // ── Email Register: Verify OTP ──
   const handleVerifyOTP = async () => {
-    if (!otp) return showAlert(t.enterCode, t.enterCodeMsg);
-    const { error } = await verifyOTPAndLogin(email.trim(), otp, { password });
+    if (!otp || otp.length < 4) return showAlert(t.enterCode, t.enterCodeMsg);
+    const { error } = await verifyOTPAndLogin(email.trim(), otp.trim(), { password });
     if (error) showAlert(t.verificationFailed, error);
   };
 
@@ -327,6 +329,8 @@ export default function LoginScreen() {
                     keyboardType="number-pad"
                     maxLength={4}
                     textAlign="center"
+                    returnKeyType="done"
+                    onSubmitEditing={handleVerifySmsOtp}
                   />
 
                   <Button
@@ -385,6 +389,8 @@ export default function LoginScreen() {
                     keyboardType="number-pad"
                     maxLength={4}
                     textAlign="center"
+                    returnKeyType="done"
+                    onSubmitEditing={handleVerifyOTP}
                   />
                   <Button label={t.verifyCreate} onPress={handleVerifyOTP} loading={operationLoading} size="lg" />
                   <Pressable style={styles.link} onPress={() => setMode('register')}>

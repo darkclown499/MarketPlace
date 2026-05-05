@@ -65,7 +65,6 @@ export default function OnboardingScreen() {
   };
 
   const isLast = currentIndex === SLIDES.length - 1;
-  const slide = SLIDES[currentIndex];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>

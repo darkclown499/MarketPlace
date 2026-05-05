@@ -135,3 +135,34 @@ export async function markMessagesRead(
     .neq('sender_id', currentUserId)
     .is('read_at', null);
 }
+
+/** Update typing indicator for the current user in a conversation */
+export async function updateTypingIndicator(
+  conversationId: string,
+  isBuyer: boolean,
+  isTyping: boolean
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  const col = isBuyer ? 'buyer_typing_at' : 'seller_typing_at';
+  const value = isTyping ? new Date().toISOString() : null;
+  await supabase
+    .from('conversations')
+    .update({ [col]: value })
+    .eq('id', conversationId);
+}
+
+/** Fetch typing status for a conversation */
+export async function fetchTypingStatus(
+  conversationId: string
+): Promise<{ buyer_typing_at: string | null; seller_typing_at: string | null }> {
+  const supabase = getSupabaseClient();
+  const { data } = await supabase
+    .from('conversations')
+    .select('buyer_typing_at, seller_typing_at')
+    .eq('id', conversationId)
+    .single();
+  return {
+    buyer_typing_at: data?.buyer_typing_at ?? null,
+    seller_typing_at: data?.seller_typing_at ?? null,
+  };
+}

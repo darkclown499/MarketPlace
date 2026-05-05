@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { fetchMessages, fetchMyConversations, Message, Conversation } from '@/services/chatService';
 import { getSupabaseClient } from '@/template';
@@ -89,6 +89,10 @@ export function useConversations() {
       const newCount = count ?? 0;
       prevUnreadRef.current = newCount;
       setUnreadCount(newCount);
+      // Update app badge count
+      if (Notifications && Platform.OS !== 'web') {
+        try { await Notifications.setBadgeCountAsync(newCount); } catch (_) {}
+      }
     } catch {
       setUnreadCount(0);
     }
@@ -138,6 +142,10 @@ export function useConversations() {
 
       prevUnreadRef.current = newCount;
       setUnreadCount(newCount);
+      // Update app badge count
+      if (Notifications && Platform.OS !== 'web') {
+        try { await Notifications.setBadgeCountAsync(newCount); } catch (_) {}
+      }
     } catch {
       setUnreadCount(0);
     }
