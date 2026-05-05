@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Switch, TextInput,
@@ -382,6 +383,64 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
 
+          {/* ── FOLLOW US CARD ── */}
+          <View style={[styles.followCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {/* Header */}
+            <View style={[styles.followCardHeader, { borderBottomColor: colors.borderLight }]}>
+              <Text style={[styles.followCardTitle, { color: colors.primary }]}>
+                {isRTL ? '🌐 تابعنا على السوشال ميديا' : '🌐 Follow Us on Social Media'}
+              </Text>
+            </View>
+
+            {/* Logo */}
+            <View style={styles.followLogoWrap}>
+              <Image
+                source={require('@/assets/images/plankton-logo.png')}
+                style={styles.followLogo}
+                contentFit="contain"
+                transition={200}
+              />
+            </View>
+
+            {/* Social Buttons */}
+            <View style={[styles.socialBtns, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+              {/* Facebook */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.socialBtn,
+                  { backgroundColor: '#1877F2', opacity: pressed ? 0.85 : 1 },
+                ]}
+                onPress={() =>
+                  Linking.openURL('https://www.facebook.com/share/1L5KLdnkaY/').catch(() => {})
+                }
+              >
+                <MaterialIcons name="facebook" size={22} color="#fff" />
+                <Text style={styles.socialBtnText}>{isRTL ? 'فيسبوك' : 'Facebook'}</Text>
+              </Pressable>
+
+              {/* Instagram */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.socialBtn,
+                  styles.instagramBtn,
+                  { opacity: pressed ? 0.85 : 1 },
+                ]}
+                onPress={() =>
+                  Linking.openURL('https://www.instagram.com/co.plankton?igsh=MWV4Z2RncTVoYW81ZA==').catch(() => {})
+                }
+              >
+                <MaterialIcons name="photo-camera" size={20} color="#fff" />
+                <Text style={styles.socialBtnText}>{isRTL ? 'إنستغرام' : 'Instagram'}</Text>
+              </Pressable>
+            </View>
+
+            <Text style={[styles.followTagline, { color: colors.textMuted }]}>
+              {isRTL
+                ? 'تابعنا لتبقى على اطلاع بآخر العروض والأخبار 🎉'
+                : 'Follow us for the latest deals and updates 🎉'}
+            </Text>
+          </View>
+
           {/* ── MY LISTINGS ── */}
           <View style={[styles.listingsSection]}>
             <View style={[styles.listingsHeader, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
@@ -565,6 +624,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 7, minWidth: 40, alignItems: 'center',
   },
   langOptionText: { fontSize: FontSize.sm },
+
+  // Follow Us card
+  followCard: {
+    marginHorizontal: Spacing.lg, marginTop: Spacing.md,
+    borderRadius: Radius.xl, borderWidth: 1, overflow: 'hidden',
+  },
+  followCardHeader: {
+    paddingHorizontal: Spacing.md, paddingVertical: 12, borderBottomWidth: 1,
+    alignItems: 'center',
+  },
+  followCardTitle: { fontSize: FontSize.sm, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8 },
+  followLogoWrap: { alignItems: 'center', paddingVertical: Spacing.md },
+  followLogo: { width: 160, height: 64 },
+  socialBtns: {
+    flexDirection: 'row', gap: Spacing.sm,
+    paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm,
+  },
+  socialBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 12, borderRadius: Radius.lg,
+  },
+  instagramBtn: {
+    // Instagram gradient approximated as solid
+    backgroundColor: '#C13584',
+  },
+  socialBtnText: { color: '#fff', fontSize: FontSize.sm, fontWeight: '700' },
+  followTagline: {
+    fontSize: FontSize.xs, textAlign: 'center',
+    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, paddingBottom: Spacing.md,
+    lineHeight: 18,
+  },
 
   // Listings section
   listingsSection: { padding: Spacing.lg, gap: Spacing.sm },
