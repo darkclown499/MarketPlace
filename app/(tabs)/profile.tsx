@@ -393,13 +393,18 @@ export default function ProfileScreen() {
             </View>
 
             {/* Logo */}
-            <View style={styles.followLogoWrap}>
-              <Image
-                source={require('@/assets/images/plankton-logo.png')}
-                style={styles.followLogo}
-                contentFit="contain"
-                transition={200}
-              />
+            <View style={[styles.followLogoWrap, { backgroundColor: colors.background }]}>
+              <View style={[styles.followLogoBg, { borderColor: colors.border }]}>
+                <Image
+                  source={require('@/assets/images/plankton-logo.png')}
+                  style={styles.followLogo}
+                  contentFit="contain"
+                  transition={300}
+                />
+              </View>
+              <Text style={[styles.followLogoSub, { color: colors.textMuted }]}>
+                {isRTL ? 'بتحبك يا بلانكتون 💚' : 'Built with 💚 by Plankton'}
+              </Text>
             </View>
 
             {/* Social Buttons */}
@@ -635,8 +640,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   followCardTitle: { fontSize: FontSize.sm, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8 },
-  followLogoWrap: { alignItems: 'center', paddingVertical: Spacing.md },
-  followLogo: { width: 160, height: 64 },
+  followLogoWrap: { alignItems: 'center', paddingVertical: Spacing.lg, gap: 10 },
+  followLogoBg: {
+    width: '88%',
+    paddingVertical: 20,
+    paddingHorizontal: 24,
+    borderRadius: Radius.xl,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderStyle: 'dashed',
+  },
+  followLogo: { width: 220, height: 88 },
+  followLogoSub: { fontSize: FontSize.xs, fontWeight: '600', letterSpacing: 0.3 },
   socialBtns: {
     flexDirection: 'row', gap: Spacing.sm,
     paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm,
