@@ -3,14 +3,42 @@ import { STORAGE_BUCKET } from '@/constants/config';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-export async function pickImage(): Promise<{ uri: string; base64: string } | null> {
+export async function pickImage(source: 'camera' | 'gallery' = 'gallery'): Promise<{ uri: string; base64: string } | null> {
+  if (source === 'camera') {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') return null;
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 1,
+      base64: false,
+      allowsEditing: true,
+      aspect: [4, 3],
+    });
+
+    if (result.canceled || !result.assets[0]) return null;
+    const asset = result.assets[0];
+
+    try {
+      const manipulated = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 1080 } }],
+        { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      return { uri: manipulated.uri, base64: manipulated.base64 ?? '' };
+    } catch {
+      return { uri: asset.uri, base64: '' };
+    }
+  }
+
+  // Gallery
   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (status !== 'granted') return null;
 
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
-    quality: 1, // We compress manually below
-    base64: false, // We get base64 after compression
+    quality: 1,
+    base64: false,
     allowsEditing: true,
     aspect: [4, 3],
   });
@@ -18,7 +46,6 @@ export async function pickImage(): Promise<{ uri: string; base64: string } | nul
   if (result.canceled || !result.assets[0]) return null;
   const asset = result.assets[0];
 
-  // Compress image: resize to max 1080px wide, 75% quality
   try {
     const manipulated = await ImageManipulator.manipulateAsync(
       asset.uri,
@@ -27,7 +54,6 @@ export async function pickImage(): Promise<{ uri: string; base64: string } | nul
     );
     return { uri: manipulated.uri, base64: manipulated.base64 ?? '' };
   } catch {
-    // Fallback: re-pick with base64 if manipulator fails
     const fallback = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.75,
@@ -47,7 +73,6 @@ export async function uploadImage(
 ): Promise<{ url: string | null; error: string | null }> {
   const supabase = getSupabaseClient();
 
-  // Convert base64 to Uint8Array
   const byteCharacters = atob(base64);
   const byteNumbers = new Array(byteCharacters.length);
   for (let i = 0; i < byteCharacters.length; i++) {
