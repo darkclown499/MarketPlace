@@ -116,8 +116,11 @@ export default function LoginScreen() {
     try {
       const supabase = getSupabaseClient();
 
-      // Build redirect URI using the app scheme defined in app.json
-      const redirectTo = AuthSession.makeRedirectUri({ scheme: 'onspaceapp', path: 'auth/callback' });
+      // Build redirect URI: hardcode scheme on mobile to avoid "no custom scheme" error,
+      // use makeRedirectUri on web where it resolves to the correct origin URL.
+      const redirectTo = Platform.OS === 'web'
+        ? AuthSession.makeRedirectUri({ path: 'auth/callback' })
+        : 'onspaceapp://auth/callback';
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
