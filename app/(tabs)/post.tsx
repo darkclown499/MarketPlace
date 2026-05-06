@@ -63,12 +63,34 @@ export default function PostAdScreen() {
     );
   }
 
-  const handleAddImage = async () => {
+const handleAddImage = async () => {
     if (images.length >= MAX_AD_IMAGES) {
       return showAlert(t.photos, `Max ${MAX_AD_IMAGES} photos allowed.`);
     }
-    const result = await pickImage();
-    if (result) setImages(prev => [...prev, result]);
+    showAlert(
+      language === 'ar' ? 'إضافة صورة' : 'Add Photo',
+      language === 'ar' ? 'اختر طريقة الإضافة' : 'Choose how to add a photo',
+      [
+        {
+          text: language === 'ar' ? '📷 التقط صورة' : '📷 Take Photo',
+          onPress: async () => {
+            const result = await pickImage('camera');
+            if (result) setImages(prev => [...prev, result]);
+          },
+        },
+        {
+          text: language === 'ar' ? '🖼️ من المعرض' : '🖼️ Choose from Gallery',
+          onPress: async () => {
+            const result = await pickImage('gallery');
+            if (result) setImages(prev => [...prev, result]);
+          },
+        },
+        {
+          text: language === 'ar' ? 'إلغاء' : 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
   const handleRemoveImage = (index: number) => setImages(prev => prev.filter((_, i) => i !== index));
