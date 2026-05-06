@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, Pressable, Dimensions, FlatList, Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -34,10 +35,11 @@ const SLIDES = [
   {
     id: '3',
     iconName: 'groups' as const,
-    iconBg: '#6366F1',
-    gradient: ['#4F46E5', '#6366F1'],
+    iconBg: '#0A6E5C',
+    gradient: ['#0A6E5C', '#0D9176'],
     titleKey: 'onboarding3Title' as const,
     subKey: 'onboarding3Sub' as const,
+    isLogo: true,
   },
 ];
 
@@ -111,14 +113,33 @@ export default function OnboardingScreen() {
           <View style={[styles.slide, { width }]}>
             {/* Illustration card */}
             <View style={[styles.illustrationWrap, { backgroundColor: colors.surface, ...Shadow.lg }]}>
-              <View style={[styles.illustrationCircle, { backgroundColor: item.iconBg + '18' }]}>
-                <View style={[styles.illustrationInner, { backgroundColor: item.iconBg }]}>
-                  <MaterialIcons name={item.iconName} size={52} color="#fff" />
-                </View>
-              </View>
-              {/* Decorative rings */}
-              <View style={[styles.ring1, { borderColor: item.iconBg + '25' }]} />
-              <View style={[styles.ring2, { borderColor: item.iconBg + '15' }]} />
+              {(item as any).isLogo ? (
+                <>
+                  {/* Logo slide */}
+                  <View style={[styles.logoContainer, { backgroundColor: '#0A6E5C' + '10' }]}>
+                    <Image
+                      source={require('@/assets/images/plankton-logo.png')}
+                      style={styles.logoImage}
+                      contentFit="contain"
+                      transition={300}
+                    />
+                  </View>
+                  <View style={[styles.logoTagWrap, { backgroundColor: colors.primary }]}>
+                    <Text style={styles.logoTagText}>Plankton Team</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={[styles.illustrationCircle, { backgroundColor: item.iconBg + '18' }]}>
+                    <View style={[styles.illustrationInner, { backgroundColor: item.iconBg }]}>
+                      <MaterialIcons name={item.iconName} size={52} color="#fff" />
+                    </View>
+                  </View>
+                  {/* Decorative rings */}
+                  <View style={[styles.ring1, { borderColor: item.iconBg + '25' }]} />
+                  <View style={[styles.ring2, { borderColor: item.iconBg + '15' }]} />
+                </>
+              )}
             </View>
 
             <View style={styles.textArea}>
@@ -198,6 +219,32 @@ const styles = StyleSheet.create({
   ring2: {
     position: 'absolute', width: width * 0.7, height: width * 0.7,
     borderRadius: width * 0.35, borderWidth: 1,
+  },
+
+  // Logo slide
+  logoContainer: {
+    width: width * 0.58, height: width * 0.38,
+    borderRadius: Radius.xl,
+    alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
+    padding: 16,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  logoTagWrap: {
+    position: 'absolute',
+    bottom: 14,
+    borderRadius: Radius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+  },
+  logoTagText: {
+    color: '#fff',
+    fontSize: FontSize.sm,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   textArea: { alignItems: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.md },
   slideTitle: { fontSize: FontSize.xxl, fontWeight: '800', textAlign: 'center', letterSpacing: -0.5, lineHeight: 32 },
