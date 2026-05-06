@@ -60,6 +60,7 @@ export default function RootLayout() {
                 <Stack.Screen name="admin/index" options={{ headerShown: false }} />
                 <Stack.Screen name="onboarding" options={{ headerShown: false }} />
                 <Stack.Screen name="beta-warning" options={{ headerShown: false }} />
+                <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
                 <Stack.Screen name="favorites" options={{ headerShown: false }} />
               </Stack>
             </AuthProvider>

@@ -4,9 +4,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useAuth, useAlert } from '@/template';
-import { getSupabaseClient } from '@/template';
+import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { FunctionsHttpError } from '@supabase/supabase-js';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
 import { useRouter } from 'expo-router';
 import { Button, Input } from '@/components';
 import { Spacing, FontSize, Radius, Shadow } from '@/constants/theme';
@@ -22,7 +23,13 @@ const PHONE_PREFIXES = ['+970', '+972'];
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { signInWithPassword, sendOTP, verifyOTPAndLogin, signInWithGoogle, operationLoading } = useAuth();
+  const { signInWithPassword, sendOTP, verifyOTPAndLogin, operationLoading } = useAuth();
+
+  // Warm up the browser for faster Google OAuth opening (Android)
+  React.useEffect(() => {
+    if (Platform.OS !== 'web') WebBrowser.warmUpAsync();
+    return () => { if (Platform.OS !== 'web') WebBrowser.coolDownAsync(); };
+  }, []);
   const { showAlert } = useAlert();
   const { colors, isDark } = useTheme();
   const { t, language, setLanguage } = useLanguage();
@@ -107,8 +114,50 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
-      const { error } = await signInWithGoogle();
-      if (error) showAlert(isAr ? 'خطأ' : 'Error', error);
+      const supabase = getSupabaseClient();
+
+      // Build redirect URI using the app scheme defined in app.json
+      const redirectTo = AuthSession.makeRedirectUri({ scheme: 'onspaceapp', path: 'auth/callback' });
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error || !data?.url) {
+        showAlert(isAr ? 'خطأ' : 'Error', error?.message ?? 'Failed to start Google sign-in');
+        return;
+      }
+
+      // Open OAuth in system browser
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+
+      if (result.type === 'success' && result.url) {
+        // Extract tokens from the callback URL fragment
+        const url = result.url;
+        const params = new URLSearchParams(url.includes('#') ? url.split('#')[1] : url.split('?')[1] ?? '');
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (sessionError) {
+            showAlert(isAr ? 'خطأ' : 'Error', sessionError.message);
+            return;
+          }
+          router.replace('/(tabs)');
+        } else {
+          showAlert(isAr ? 'خطأ' : 'Error', isAr ? 'لم يتم استلام بيانات الجلسة' : 'No session data received');
+        }
+      } else if (result.type === 'cancel' || result.type === 'dismiss') {
+        // User cancelled — do nothing
+      }
     } catch (e: any) {
       showAlert(isAr ? 'خطأ' : 'Error', e.message ?? 'Google sign-in failed');
     } finally {
