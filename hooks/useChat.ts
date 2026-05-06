@@ -96,6 +96,21 @@ export function useMessages(conversationId: string) {
     setMessages(prev => prev.map(m => m.id === tempId ? real : m));
   }, []);
 
+  /**
+   * Immediately mark all messages from the other party as read in local state.
+   * Call this right after markMessagesRead() DB call so receipts update instantly
+   * without waiting for the next poll cycle.
+   */
+  const markReadLocally = useCallback((currentUserId: string) => {
+    setMessages(prev =>
+      prev.map(m =>
+        m.sender_id !== currentUserId && !m.read_at
+          ? { ...m, read_at: new Date().toISOString() }
+          : m
+      )
+    );
+  }, []);
+
   useEffect(() => {
     if (!conversationId) return;
     // Initial load
@@ -110,7 +125,7 @@ export function useMessages(conversationId: string) {
     };
   }, [conversationId]);
 
-  return { messages, loading: initialLoading, refreshing, reload, pollSilent, appendMessage, updateMessage };
+  return { messages, loading: initialLoading, refreshing, reload, pollSilent, appendMessage, updateMessage, markReadLocally };
 }
 
 // ─── useConversations ──────────────────────────────────────────────────────────

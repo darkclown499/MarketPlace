@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView, Platform, Alert,
+  View, Text, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView, Platform, Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -41,6 +41,7 @@ export default function PostAdScreen() {
   const [condition, setCondition] = useState<Condition>('used');
   const [images, setImages] = useState<ImageItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [photoModalVisible, setPhotoModalVisible] = useState(false);
 
   const rtl = { flexDirection: isRTL ? ('row-reverse' as const) : ('row' as const) };
   const textAlign = { textAlign: isRTL ? ('right' as const) : ('left' as const) };
@@ -63,34 +64,35 @@ export default function PostAdScreen() {
     );
   }
 
-const handleAddImage = async () => {
+  const handleAddImage = () => {
     if (images.length >= MAX_AD_IMAGES) {
-      return showAlert(t.photos, `Max ${MAX_AD_IMAGES} photos allowed.`);
+      return showAlert(t.photos, language === 'ar' ? `الحد الأقصى ${MAX_AD_IMAGES} صور.` : `Max ${MAX_AD_IMAGES} photos allowed.`);
     }
-    Alert.alert(
-      language === 'ar' ? 'إضافة صورة' : 'Add Photo',
-      language === 'ar' ? 'اختر طريقة الإضافة' : 'Choose how to add a photo',
-      [
-        {
-          text: language === 'ar' ? '📷 التقط صورة' : '📷 Take Photo',
-          onPress: async () => {
-            const result = await pickImage('camera');
-            if (result) setImages(prev => [...prev, result]);
-          },
-        },
-        {
-          text: language === 'ar' ? '🖼️ من المعرض' : '🖼️ Choose from Gallery',
-          onPress: async () => {
-            const result = await pickImage('gallery');
-            if (result) setImages(prev => [...prev, result]);
-          },
-        },
-        {
-          text: language === 'ar' ? 'إلغاء' : 'Cancel',
-          style: 'cancel',
-        },
-      ]
-    );
+    setPhotoModalVisible(true);
+  };
+
+  const handlePickCamera = async () => {
+    setPhotoModalVisible(false);
+    // Small delay so modal closes before camera opens
+    setTimeout(async () => {
+      const result = await pickImage('camera');
+      if (result) {
+        setImages(prev => [...prev, result]);
+      } else {
+        showAlert(
+          language === 'ar' ? 'لا يوجد إذن' : 'Permission Denied',
+          language === 'ar' ? 'يرجى السماح بالوصول إلى الكاميرا من إعدادات الجهاز.' : 'Please allow camera access in your device settings.'
+        );
+      }
+    }, 300);
+  };
+
+  const handlePickGallery = async () => {
+    setPhotoModalVisible(false);
+    setTimeout(async () => {
+      const result = await pickImage('gallery');
+      if (result) setImages(prev => [...prev, result]);
+    }, 300);
   };
 
   const handleRemoveImage = (index: number) => setImages(prev => prev.filter((_, i) => i !== index));
@@ -142,6 +144,84 @@ const handleAddImage = async () => {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+
+        {/* ── Photo Source Bottom Sheet ── */}
+        <Modal
+          visible={photoModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setPhotoModalVisible(false)}
+          statusBarTranslucent
+        >
+          <Pressable style={photoStyles.overlay} onPress={() => setPhotoModalVisible(false)}>
+            <View style={[photoStyles.sheet, { backgroundColor: colors.surface }]}>
+              <View style={[photoStyles.handle, { backgroundColor: colors.border }]} />
+              <Text style={[photoStyles.sheetTitle, { color: colors.textPrimary }]}>
+                {language === 'ar' ? 'إضافة صورة' : 'Add Photo'}
+              </Text>
+              <Text style={[photoStyles.sheetSub, { color: colors.textMuted }]}>
+                {language === 'ar' ? 'اختر طريقة الإضافة' : 'Choose how to add a photo'}
+              </Text>
+
+              {/* Camera option */}
+              <Pressable
+                style={({ pressed }) => [
+                  photoStyles.option,
+                  { backgroundColor: pressed ? colors.primaryGhost : colors.background, borderColor: colors.border },
+                ]}
+                onPress={handlePickCamera}
+              >
+                <View style={[photoStyles.optionIcon, { backgroundColor: colors.primary + '18' }]}>
+                  <Text style={photoStyles.optionEmoji}>📷</Text>
+                </View>
+                <View style={photoStyles.optionText}>
+                  <Text style={[photoStyles.optionTitle, { color: colors.textPrimary }]}>
+                    {language === 'ar' ? 'التقط صورة' : 'Take Photo'}
+                  </Text>
+                  <Text style={[photoStyles.optionSub, { color: colors.textMuted }]}>
+                    {language === 'ar' ? 'استخدم كاميرا الجهاز' : 'Use device camera'}
+                  </Text>
+                </View>
+                <View style={[photoStyles.optionArrow]}>
+                  <Text style={{ color: colors.textMuted, fontSize: 18 }}>›</Text>
+                </View>
+              </Pressable>
+
+              {/* Gallery option */}
+              <Pressable
+                style={({ pressed }) => [
+                  photoStyles.option,
+                  { backgroundColor: pressed ? colors.primaryGhost : colors.background, borderColor: colors.border },
+                ]}
+                onPress={handlePickGallery}
+              >
+                <View style={[photoStyles.optionIcon, { backgroundColor: '#F59E0B18' }]}>
+                  <Text style={photoStyles.optionEmoji}>🖼️</Text>
+                </View>
+                <View style={photoStyles.optionText}>
+                  <Text style={[photoStyles.optionTitle, { color: colors.textPrimary }]}>
+                    {language === 'ar' ? 'من المعرض' : 'Choose from Gallery'}
+                  </Text>
+                  <Text style={[photoStyles.optionSub, { color: colors.textMuted }]}>
+                    {language === 'ar' ? 'اختر من صور الجهاز' : 'Select from your photos'}
+                  </Text>
+                </View>
+                <View style={[photoStyles.optionArrow]}>
+                  <Text style={{ color: colors.textMuted, fontSize: 18 }}>›</Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                style={[photoStyles.cancelBtn, { backgroundColor: colors.background }]}
+                onPress={() => setPhotoModalVisible(false)}
+              >
+                <Text style={[photoStyles.cancelText, { color: colors.textPrimary }]}>
+                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Modal>
         <View style={[styles.header, { backgroundColor: colors.primary }]}>
           <View>
             <Text style={[styles.headerSub, textAlign]}>{t.create}</Text>
@@ -449,4 +529,58 @@ const styles = StyleSheet.create({
   guestTitle: { fontSize: FontSize.xl, fontWeight: '700' },
   guestSub: { fontSize: FontSize.md, textAlign: 'center', lineHeight: 22 },
   guestBtn: { width: '100%', marginTop: Spacing.sm },
+});
+
+const photoStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: 36,
+    paddingTop: 12,
+    gap: Spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 20,
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    alignSelf: 'center', marginBottom: Spacing.md,
+  },
+  sheetTitle: {
+    fontSize: FontSize.lg, fontWeight: '700',
+    textAlign: 'center',
+  },
+  sheetSub: {
+    fontSize: FontSize.sm, textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+  option: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: Spacing.md, padding: Spacing.md,
+    borderRadius: Radius.lg, borderWidth: 1.5,
+  },
+  optionIcon: {
+    width: 52, height: 52, borderRadius: Radius.md,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  optionEmoji: { fontSize: 26 },
+  optionText: { flex: 1, gap: 3 },
+  optionTitle: { fontSize: FontSize.md, fontWeight: '700' },
+  optionSub: { fontSize: FontSize.sm },
+  optionArrow: { paddingLeft: 4 },
+  cancelBtn: {
+    borderRadius: Radius.xl,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: Spacing.xs ?? 4,
+  },
+  cancelText: { fontSize: FontSize.md, fontWeight: '700' },
 });
