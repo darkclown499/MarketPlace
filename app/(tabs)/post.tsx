@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView, Platform,
+  View, Text, StyleSheet, ScrollView, Pressable, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -67,7 +67,7 @@ const handleAddImage = async () => {
     if (images.length >= MAX_AD_IMAGES) {
       return showAlert(t.photos, `Max ${MAX_AD_IMAGES} photos allowed.`);
     }
-    showAlert(
+    Alert.alert(
       language === 'ar' ? 'إضافة صورة' : 'Add Photo',
       language === 'ar' ? 'اختر طريقة الإضافة' : 'Choose how to add a photo',
       [
