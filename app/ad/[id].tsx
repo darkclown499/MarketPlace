@@ -382,15 +382,6 @@ export default function AdDetailScreen() {
 }
 
 // ── Inner scroll content extracted to avoid deeply nested JSX ──
-function _timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 30) return `${days} days ago`;
-  return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-}
-
 function AdDetailScrollContent({
   ad, images, activeImage, setActiveImage, openGallery,
   isNew, isBoosted, isFree, hasPhone, isOwner,

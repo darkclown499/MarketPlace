@@ -187,7 +187,7 @@ export function useConversations() {
         try {
           const { data: latestMsgs } = await supabase
             .from('messages')
-            .select('content, sender_id, user_profiles!sender_id(username, email)')
+            .select('content, sender_id')
             .is('read_at', null)
             .neq('sender_id', user.id)
             .order('created_at', { ascending: false })
@@ -195,8 +195,7 @@ export function useConversations() {
 
           if (latestMsgs && latestMsgs.length > 0) {
             const msg = latestMsgs[0] as any;
-            const profile = msg['user_profiles'];
-            const senderName = profile?.username || profile?.email?.split('@')[0] || 'رسالة جديدة';
+            const senderName = 'New message';
             const preview = msg.content?.substring(0, 80) || '...';
             await notifyNewMessage(senderName, preview);
           }

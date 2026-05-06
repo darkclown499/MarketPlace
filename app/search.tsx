@@ -332,7 +332,9 @@ const styles = StyleSheet.create({
 
   // History panel
   historyPanel: {
-    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50,
+    position: 'absolute',
+    top: 80,
+    left: 0, right: 0, zIndex: 50,
     borderBottomWidth: 1, borderBottomLeftRadius: Radius.xl, borderBottomRightRadius: Radius.xl,
     overflow: 'hidden',
   },

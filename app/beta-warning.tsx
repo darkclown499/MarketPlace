@@ -138,7 +138,7 @@ export default function BetaWarningScreen() {
             styles.continueBtn,
             {
               backgroundColor: canContinue ? colors.primary : '#CBD5E1',
-              ...Shadow,
+              ...Shadow.md,
             },
           ]}
           onPress={handleContinue}
