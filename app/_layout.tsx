@@ -48,6 +48,23 @@ export default function RootLayout() {
   useEffect(() => {
     requestNotificationPermissions();
 
+    // Listen for session expiry / forced sign-out and redirect user to login
+    import('@/template').then(({ getSupabaseClient }) => {
+      const supabase = getSupabaseClient();
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_OUT') {
+          // Import router lazily to avoid circular dependency at module level
+          import('expo-router').then(({ router }) => {
+            router.replace('/login');
+          });
+        }
+        if (event === 'TOKEN_REFRESHED') {
+          // Session refreshed successfully — no action needed
+        }
+      });
+      return () => subscription.unsubscribe();
+    });
+
     // Runtime handler: clear invalid session when Supabase reports token failure
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       // Intercept unhandled auth errors logged to console (AuthApiError)

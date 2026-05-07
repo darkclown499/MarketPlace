@@ -30,12 +30,32 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
-    // Fetch recipient push token
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('user_profiles')
-      .select('push_token')
-      .eq('id', recipient_id)
-      .single();
+    // Fetch recipient push token and actual unread message count
+    const [profileResult, convResult] = await Promise.all([
+      supabaseAdmin
+        .from('user_profiles')
+        .select('push_token')
+        .eq('id', recipient_id)
+        .single(),
+      supabaseAdmin
+        .from('conversations')
+        .select('id')
+        .or(`buyer_id.eq.${recipient_id},seller_id.eq.${recipient_id}`),
+    ]);
+
+    const { data: profile, error: profileError } = profileResult;
+    const convIds: string[] = (convResult.data ?? []).map((c: any) => c.id);
+
+    let unreadCount = 1;
+    if (convIds.length > 0) {
+      const { count } = await supabaseAdmin
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .is('read_at', null)
+        .neq('sender_id', recipient_id)
+        .in('conversation_id', convIds);
+      unreadCount = count ?? 1;
+    }
 
     if (profileError) {
       console.error('[push-notify] Profile fetch error:', profileError.message);
@@ -57,7 +77,7 @@ serve(async (req) => {
       title: sender_name,
       body: message_preview.substring(0, 100),
       sound: 'default',
-      badge: 1,
+      badge: unreadCount,
       data: { type: 'new_message', recipient_id },
       priority: 'high',
     };
