@@ -130,21 +130,40 @@ export default function LoginScreen() {
     try {
       const supabase = getSupabaseClient();
 
+      if (Platform.OS === 'web') {
+        // ── WEB: let Supabase redirect the browser directly ──────────────────
+        // On web, openAuthSessionAsync redirects the page away and never returns
+        // a 'success' result. Instead, we use skipBrowserRedirect: false so
+        // Supabase/Google redirect the browser back to /auth/callback, where
+        // auth/callback.tsx calls exchangeCodeForSession and redirects to tabs.
+        const redirectTo = typeof window !== 'undefined'
+          ? `${window.location.origin}/auth/callback`
+          : '';
 
-      // Build redirect URI:
-      // - Web: use window.location.origin so it resolves to the actual preview/production URL
-      //   (AuthSession.makeRedirectUri returns the mobile scheme even on web in OnSpace)
-      // - Mobile: hardcode the custom scheme to avoid "no custom scheme" error
-      const redirectTo = Platform.OS === 'web' && typeof window !== 'undefined'
-        ? `${window.location.origin}/auth/callback`
-        : 'onspaceapp://auth/callback';
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo,
+            skipBrowserRedirect: false, // let Supabase open the URL directly
+            queryParams: { prompt: 'select_account', access_type: 'offline' },
+          },
+        });
+        if (error) {
+          showAlert(isAr ? 'خطأ' : 'Error', error.message);
+        }
+        // Page navigates away — loading state reset is handled by unmount
+        return;
+      }
+
+      // ── MOBILE: use WebBrowser to capture the deep-link callback ─────────
+      // redirectTo must be the custom scheme so WebBrowser knows when to close.
+      const redirectTo = 'onspaceapp://auth/callback';
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo,
           skipBrowserRedirect: true,
-          // Force Google account picker; otherwise a single signed-in account can skip the UI entirely.
           queryParams: { prompt: 'select_account', access_type: 'offline' },
         },
       });
@@ -154,15 +173,15 @@ export default function LoginScreen() {
         return;
       }
 
-      // Open OAuth in system browser
+      // Open OAuth in system browser; closes when it sees onspaceapp:// scheme
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
 
-      if (result.type === 'success' && result.url) { // Corrected from `&amp;&amp;` to `&&`
+      if (result.type === 'success' && result.url) {
         const callbackUrl = result.url;
         let params: URLSearchParams;
         try {
           const parsed = new URL(callbackUrl);
-          // Hash (#access_token=...) or query (?code=...) — merge for lookup
+          // Supabase may use hash (#access_token=...) or query (?code=...) — merge both
           const hashParams = parsed.hash?.startsWith('#')
             ? new URLSearchParams(parsed.hash.slice(1))
             : new URLSearchParams();
@@ -214,7 +233,6 @@ export default function LoginScreen() {
     } finally {
       setGoogleLoading(false);
     }
-
   };
 
 
