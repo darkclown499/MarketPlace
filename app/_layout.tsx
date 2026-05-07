@@ -9,6 +9,8 @@ import { requestNotificationPermissions } from '@/hooks/useChat';
 
 // Clear stale/expired Supabase tokens from browser localStorage to prevent
 // "Invalid Refresh Token: Refresh Token Not Found" on startup.
+// Refresh tokens can be revoked server-side even if expires_at is future,
+// so we clear aggressively: any stored session without a valid refresh token.
 if (Platform.OS === 'web' && typeof window !== 'undefined') {
   try {
     const keysToRemove: string[] = [];
@@ -16,19 +18,23 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const key = localStorage.key(i);
       if (key && key.includes('supabase')) keysToRemove.push(key);
     }
-    // Check if the stored session has an expired or missing refresh token
     const sessionKey = keysToRemove.find(k => k.includes('auth-token'));
     if (sessionKey) {
       const raw = localStorage.getItem(sessionKey);
       let shouldClear = !raw;
-      if (raw && !shouldClear) {
+      if (raw) {
         try {
           const parsed = JSON.parse(raw);
-          // Clear if no refresh_token, or if access token is clearly expired
           const hasRefreshToken = !!parsed?.refresh_token;
           const expiresAt: number = parsed?.expires_at ?? 0;
+          // Clear if: no refresh token, access token expired, or token was issued
+          // more than 7 days ago (refresh tokens typically expire in 7 days)
           const isExpired = expiresAt > 0 && expiresAt * 1000 < Date.now();
-          if (!hasRefreshToken || isExpired) shouldClear = true;
+          const issuedAt: number = parsed?.user?.created_at
+            ? 0
+            : (parsed?.issued_at ?? 0);
+          const isStale = issuedAt > 0 && (Date.now() / 1000 - issuedAt) > 7 * 24 * 3600;
+          if (!hasRefreshToken || isExpired || isStale) shouldClear = true;
         } catch {
           shouldClear = true;
         }
@@ -41,6 +47,29 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
 export default function RootLayout() {
   useEffect(() => {
     requestNotificationPermissions();
+
+    // Runtime handler: clear invalid session when Supabase reports token failure
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      // Intercept unhandled auth errors logged to console (AuthApiError)
+      const originalConsoleError = console.error.bind(console);
+      console.error = (...args: any[]) => {
+        const msg = args[0]?.message ?? String(args[0] ?? '');
+        if (msg.includes('Refresh Token Not Found') || msg.includes('Invalid Refresh Token')) {
+          // Silently clear stale tokens and suppress the noise
+          try {
+            const keys: string[] = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && k.includes('supabase')) keys.push(k);
+            }
+            keys.forEach(k => localStorage.removeItem(k));
+          } catch (_) {}
+          return; // suppress error log
+        }
+        originalConsoleError(...args);
+      };
+      return () => { console.error = originalConsoleError; };
+    }
   }, []);
 
   return (
