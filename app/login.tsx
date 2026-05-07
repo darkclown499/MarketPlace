@@ -152,11 +152,16 @@ export default function LoginScreen() {
           setGoogleLoading(false);
           return;
         }
-        // Navigate to Google OAuth — use _top to break out of any iframe (live preview)
-        // and _blank as fallback if _top is blocked by the browser.
+        // Navigate to Google OAuth — use window.top.location.href to break out of
+        // any live-preview iframe. Falls back to current window if cross-origin.
         try {
-          window.open(data.url, '_top');
+          if (window.top) {
+            window.top.location.href = data.url;
+          } else {
+            window.location.href = data.url;
+          }
         } catch {
+          // Cross-origin iframe restriction — navigate current frame directly
           window.location.href = data.url;
         }
         // Don't reset loading — page is navigating away
