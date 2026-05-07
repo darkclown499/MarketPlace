@@ -42,8 +42,8 @@ export default function AuthCallbackScreen() {
   };
 
   useEffect(() => {
-    // ── MOBILE: just redirect, login.tsx already handled the token ───────
-    if (typeof window === 'undefined') {
+    // ── MOBILE: window exists in RN but window.location is undefined ────
+    if (typeof window === 'undefined' || !window.location) {
       setTimeout(goToTabs, 300);
       return;
     }
