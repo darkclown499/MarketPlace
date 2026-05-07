@@ -131,10 +131,12 @@ export default function LoginScreen() {
       const supabase = getSupabaseClient();
 
 
-      // Build redirect URI: hardcode scheme on mobile to avoid "no custom scheme" error,
-      // use makeRedirectUri on web where it resolves to the correct origin URL.
-      const redirectTo = Platform.OS === 'web'
-        ? AuthSession.makeRedirectUri({ path: 'auth/callback' })
+      // Build redirect URI:
+      // - Web: use window.location.origin so it resolves to the actual preview/production URL
+      //   (AuthSession.makeRedirectUri returns the mobile scheme even on web in OnSpace)
+      // - Mobile: hardcode the custom scheme to avoid "no custom scheme" error
+      const redirectTo = Platform.OS === 'web' && typeof window !== 'undefined'
+        ? `${window.location.origin}/auth/callback`
         : 'onspaceapp://auth/callback';
 
       const { data, error } = await supabase.auth.signInWithOAuth({
