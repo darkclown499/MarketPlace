@@ -9,6 +9,7 @@ import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
+import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { Button, Input } from '@/components';
 import { Spacing, FontSize, Radius, Shadow } from '@/constants/theme';
@@ -152,17 +153,15 @@ export default function LoginScreen() {
           setGoogleLoading(false);
           return;
         }
-        // Navigate to Google OAuth.
-        // Try window.top first to escape any live-preview iframe.
-        // Falls back to current window on cross-origin restriction.
+        // Navigate to Google OAuth URL.
+        // Use Linking.openURL which handles iframe/WebView contexts correctly,
+        // then fall back to direct window navigation.
         try {
-          if (window.top && window.top !== window) {
-            window.top.location.href = data.url;
-          } else {
-            window.location.href = data.url;
-          }
+          await Linking.openURL(data.url);
         } catch {
-          window.location.href = data.url;
+          try {
+            window.location.href = data.url;
+          } catch (_) {}
         }
         // Don't reset googleLoading — page is navigating away
         return;
