@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Pressable, ActivityIndicator, Modal,
@@ -68,7 +69,7 @@ export default function LoginScreen() {
   const toggleConfirmPassword = useCallback(() => setShowConfirmPassword(v => !v), []);
 
 
-  const fullPhone = ${phonePrefix}${phoneLocal.trim()};
+  const fullPhone = `${phonePrefix}${phoneLocal.trim()}`;
 
 
   // ── Email Login ──
@@ -130,87 +131,87 @@ export default function LoginScreen() {
       const supabase = getSupabaseClient();
 
 
-  // Build redirect URI: hardcode scheme on mobile to avoid "no custom scheme" error,
-  // use makeRedirectUri on web where it resolves to the correct origin URL.
-  const redirectTo = Platform.OS === 'web'
-    ? AuthSession.makeRedirectUri({ path: 'auth/callback' })
-    : 'onspaceapp://auth/callback';
+      // Build redirect URI: hardcode scheme on mobile to avoid "no custom scheme" error,
+      // use makeRedirectUri on web where it resolves to the correct origin URL.
+      const redirectTo = Platform.OS === 'web'
+        ? AuthSession.makeRedirectUri({ path: 'auth/callback' })
+        : 'onspaceapp://auth/callback';
 
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo,
-      skipBrowserRedirect: true,
-      // Force Google account picker; otherwise a single signed-in account can skip the UI entirely.
-      queryParams: { prompt: 'select_account', access_type: 'offline' },
-    },
-  });
-
-  if (error || !data?.url) {
-    showAlert(isAr ? 'خطأ' : 'Error', error?.message ?? 'Failed to start Google sign-in');
-    return;
-  }
-
-  // Open OAuth in system browser
-  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-
-  if (result.type === 'success' &amp;&amp; result.url) {
-    const callbackUrl = result.url;
-    let params: URLSearchParams;
-    try {
-      const parsed = new URL(callbackUrl);
-      // Hash (#access_token=...) or query (?code=...) — merge for lookup
-      const hashParams = parsed.hash?.startsWith('#')
-        ? new URLSearchParams(parsed.hash.slice(1))
-        : new URLSearchParams();
-      params = new URLSearchParams(parsed.searchParams);
-      hashParams.forEach((v, k) =&gt; params.set(k, v));
-    } catch {
-      showAlert(isAr ? 'خطأ' : 'Error', isAr ? 'رابط غير صالح' : 'Invalid callback URL');
-      return;
-    }
-
-    const oauthErr = params.get('error_description') ?? params.get('error');
-    if (oauthErr) {
-      showAlert(isAr ? 'خطأ' : 'Error', oauthErr);
-      return;
-    }
-
-    const code = params.get('code');
-    if (code) {
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-      if (exchangeError) {
-        showAlert(isAr ? 'خطأ' : 'Error', exchangeError.message);
-        return;
-      }
-      router.replace('/(tabs)');
-      return;
-    }
-
-    const accessToken = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
-    if (accessToken &amp;&amp; refreshToken) {
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+          // Force Google account picker; otherwise a single signed-in account can skip the UI entirely.
+          queryParams: { prompt: 'select_account', access_type: 'offline' },
+        },
       });
-      if (sessionError) {
-        showAlert(isAr ? 'خطأ' : 'Error', sessionError.message);
+
+      if (error || !data?.url) {
+        showAlert(isAr ? 'خطأ' : 'Error', error?.message ?? 'Failed to start Google sign-in');
         return;
       }
-      router.replace('/(tabs)');
-      return;
-    }
 
-    showAlert(isAr ? 'خطأ' : 'Error', isAr ? 'لم يتم استلام بيانات الجلسة' : 'No session data received');
-  } else if (result.type === 'cancel' || result.type === 'dismiss') {
-    // User cancelled — do nothing
-  }
-} catch (e: any) {
-  showAlert(isAr ? 'خطأ' : 'Error', e.message ?? 'Google sign-in failed');
-} finally {
-  setGoogleLoading(false);
-}
+      // Open OAuth in system browser
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+
+      if (result.type === 'success' && result.url) { // Corrected from `&amp;&amp;` to `&&`
+        const callbackUrl = result.url;
+        let params: URLSearchParams;
+        try {
+          const parsed = new URL(callbackUrl);
+          // Hash (#access_token=...) or query (?code=...) — merge for lookup
+          const hashParams = parsed.hash?.startsWith('#')
+            ? new URLSearchParams(parsed.hash.slice(1))
+            : new URLSearchParams();
+          params = new URLSearchParams(parsed.searchParams);
+          hashParams.forEach((v, k) => params.set(k, v));
+        } catch {
+          showAlert(isAr ? 'خطأ' : 'Error', isAr ? 'رابط غير صالح' : 'Invalid callback URL');
+          return;
+        }
+
+        const oauthErr = params.get('error_description') ?? params.get('error');
+        if (oauthErr) {
+          showAlert(isAr ? 'خطأ' : 'Error', oauthErr);
+          return;
+        }
+
+        const code = params.get('code');
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) {
+            showAlert(isAr ? 'خطأ' : 'Error', exchangeError.message);
+            return;
+          }
+          router.replace('/(tabs)');
+          return;
+        }
+
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        if (accessToken && refreshToken) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (sessionError) {
+            showAlert(isAr ? 'خطأ' : 'Error', sessionError.message);
+            return;
+          }
+          router.replace('/(tabs)');
+          return;
+        }
+
+        showAlert(isAr ? 'خطأ' : 'Error', isAr ? 'لم يتم استلام بيانات الجلسة' : 'No session data received');
+      } else if (result.type === 'cancel' || result.type === 'dismiss') {
+        // User cancelled — do nothing
+      }
+    } catch (e: any) {
+      showAlert(isAr ? 'خطأ' : 'Error', e.message ?? 'Google sign-in failed');
+    } finally {
+      setGoogleLoading(false);
+    }
 
   };
 
@@ -288,7 +289,7 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      {/* Full-screen loading overlay prevents double-clicks during verification /}
+      {/* Full-screen loading overlay prevents double-clicks during verification */}
       <Modal visible={isBlocking} transparent animationType="none" statusBarTranslucent>
         <View style={styles.loadingOverlay}>
           <View style={styles.loadingBox}>
@@ -304,7 +305,7 @@ export default function LoginScreen() {
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 32 }]}
         keyboardShouldPersistTaps="handled"
       >
-        {/ Language Selector */}
+        {/* Language Selector */}
         <View style={[styles.langRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
           {(['en', 'ar'] as Language[]).map(lang => (
             <Pressable
@@ -327,38 +328,38 @@ export default function LoginScreen() {
 
 
     {/* Hero */}
-    &lt;View style={styles.hero}&gt;
-      &lt;View style={styles.logoRing}&gt;
-        &lt;View style={styles.logo}&gt;
-          &lt;MaterialIcons name="storefront" size={36} color="#fff" /&gt;
-        &lt;/View&gt;
-      &lt;/View&gt;
-      &lt;View style={styles.appNameHeroRow}&gt;
-        &lt;Text style={styles.appName}&gt;{isAr ? APP_NAME_AR : APP_NAME}&lt;/Text&gt;
-        &lt;View style={styles.heroBetaBadge}&gt;
-          &lt;Text style={styles.heroBetaBadgeText}&gt;BETA&lt;/Text&gt;
-        &lt;/View&gt;
-      &lt;/View&gt;
-      &lt;Text style={styles.tagline}&gt;{t.tagline}&lt;/Text&gt;
-    &lt;/View&gt;
+    <View style={styles.hero}>
+      <View style={styles.logoRing}>
+        <View style={styles.logo}>
+          <MaterialIcons name="storefront" size={36} color="#fff" />
+        </View>
+      </View>
+      <View style={styles.appNameHeroRow}>
+        <Text style={styles.appName}>{isAr ? APP_NAME_AR : APP_NAME}</Text>
+        <View style={styles.heroBetaBadge}>
+          <Text style={styles.heroBetaBadgeText}>BETA</Text>
+        </View>
+      </View>
+      <Text style={styles.tagline}>{t.tagline}</Text>
+    </View>
 
     {/* Card */}
-    &lt;View style={[styles.card, { backgroundColor: colors.surface, ...Shadow.lg }]}&gt;
+    <View style={[styles.card, { backgroundColor: colors.surface, ...Shadow.lg }]}>
 
       {/* Auth Method Toggle (Email / SMS) */}
-      &lt;View style={[styles.methodToggle, { backgroundColor: colors.background }]}&gt;
-        {(['email', 'sms'] as AuthMethod[]).map(m =&gt; {
+      <View style={[styles.methodToggle, { backgroundColor: colors.background }]}>
+        {(['email', 'sms'] as AuthMethod[]).map(m => {
           const isActive = authMethod === m;
-          const disabled = m === 'sms' &amp;&amp; SMS_COMING_SOON;
+          const disabled = m === 'sms' && SMS_COMING_SOON;
           return (
-            &lt;Pressable
+            <Pressable
               key={m}
               style={[
                 styles.methodBtn,
-                isActive &amp;&amp; !disabled &amp;&amp; [styles.methodBtnActive, { backgroundColor: colors.primary, ...Shadow.colored }],
-                disabled &amp;&amp; styles.methodBtnDisabled,
+                isActive && !disabled && [styles.methodBtnActive, { backgroundColor: colors.primary, ...Shadow.colored }],
+                disabled && styles.methodBtnDisabled,
               ]}
-              onPress={() =&gt; {
+              onPress={() => {
                 if (disabled) return;
                 setAuthMethod(m);
                 setMode('login');
@@ -367,107 +368,107 @@ export default function LoginScreen() {
                 setOtp('');
               }}
               disabled={disabled}
-            &gt;
-              &lt;MaterialIcons
+            >
+              <MaterialIcons
                 name={m === 'email' ? 'email' : 'sms'}
                 size={15}
                 color={disabled ? colors.textMuted : isActive ? '#fff' : colors.textMuted}
-              /&gt;
-              &lt;View style={{ alignItems: 'flex-start', gap: 1 }}&gt;
-                &lt;Text style={[styles.methodBtnText, { color: disabled ? colors.textMuted : isActive ? '#fff' : colors.textMuted }, isActive &amp;&amp; !disabled &amp;&amp; { fontWeight: '700' }]}&gt;
+              />
+              <View style={{ alignItems: 'flex-start', gap: 1 }}>
+                <Text style={[styles.methodBtnText, { color: disabled ? colors.textMuted : isActive ? '#fff' : colors.textMuted }, isActive && !disabled && { fontWeight: '700' }]}>
                   {m === 'email'
                     ? (isAr ? 'البريد الإلكتروني' : 'Email')
                     : (isAr ? 'رسالة SMS' : 'SMS')}
-                &lt;/Text&gt;
+                </Text>
                 {disabled ? (
-                  &lt;Text style={styles.comingSoonText}&gt;
+                  <Text style={styles.comingSoonText}>
                     {isAr ? 'قريباً' : 'Coming Soon'}
-                  &lt;/Text&gt;
+                  </Text>
                 ) : null}
-              &lt;/View&gt;
-            &lt;/Pressable&gt;
+              </View>
+            </Pressable>
           );
         })}
-      &lt;/View&gt;
+      </View>
 
       {/* ══ SMS AUTH ══ */}
       {authMethod === 'sms' ? (
-        &lt;&gt;
+        <>
           {!smsSent ? (
-            &lt;&gt;
-              &lt;View style={styles.formHeader}&gt;
-                &lt;Text style={[styles.formTitle, { color: colors.textPrimary }]}&gt;
+            <>
+              <View style={styles.formHeader}>
+                <Text style={[styles.formTitle, { color: colors.textPrimary }]}>
                   {isAr ? 'تسجيل الدخول بالهاتف' : 'Sign In with Phone'}
-                &lt;/Text&gt;
-                &lt;Text style={[styles.formSub, { color: colors.textMuted }]}&gt;
+                </Text>
+                <Text style={[styles.formSub, { color: colors.textMuted }]}>
                   {isAr ? 'سنرسل لك رمز تحقق عبر رسالة نصية' : 'We will send you a verification code via SMS'}
-                &lt;/Text&gt;
-              &lt;/View&gt;
+                </Text>
+              </View>
 
               {/* Phone prefix selector */}
-              &lt;Text style={[styles.fieldLabel, { color: colors.textSecondary, textAlign: isAr ? 'right' : 'left' }]}&gt;
+              <Text style={[styles.fieldLabel, { color: colors.textSecondary, textAlign: isAr ? 'right' : 'left' }]}>
                 {isAr ? 'رقم الهاتف' : 'Phone Number'}
-              &lt;/Text&gt;
-              &lt;View style={[styles.phoneRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}&gt;
-                &lt;ScrollView
+              </Text>
+              <View style={[styles.phoneRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   style={[styles.prefixScroll, { borderColor: colors.border, backgroundColor: colors.background }]}
                   contentContainerStyle={styles.prefixContent}
-                &gt;
-                  {PHONE_PREFIXES.map(prefix =&gt; (
-                    &lt;Pressable
+                >
+                  {PHONE_PREFIXES.map(prefix => (
+                    <Pressable
                       key={prefix}
                       style={[
                         styles.prefixBtn,
-                        phonePrefix === prefix &amp;&amp; { backgroundColor: colors.primary },
+                        phonePrefix === prefix && { backgroundColor: colors.primary },
                       ]}
-                      onPress={() =&gt; setPhonePrefix(prefix)}
-                    &gt;
-                      &lt;Text style={[styles.prefixText, { color: phonePrefix === prefix ? '#fff' : colors.textSecondary }]}&gt;
+                      onPress={() => setPhonePrefix(prefix)}
+                    >
+                      <Text style={[styles.prefixText, { color: phonePrefix === prefix ? '#fff' : colors.textSecondary }]}>
                         {prefix}
-                      &lt;/Text&gt;
-                    &lt;/Pressable&gt;
+                      </Text>
+                    </Pressable>
                   ))}
-                &lt;/ScrollView&gt;
-                &lt;View style={styles.phoneInputWrap}&gt;
-                  &lt;Input
+                </ScrollView>
+                <View style={styles.phoneInputWrap}>
+                  <Input
                     placeholder={isAr ? 'XXXXXXXXX' : 'XXXXXXXXX'}
                     value={phoneLocal}
                     onChangeText={setPhoneLocal}
                     keyboardType="phone-pad"
                     containerStyle={styles.noMargin}
-                  /&gt;
-                &lt;/View&gt;
-              &lt;/View&gt;
-              &lt;Text style={[styles.phoneHint, { color: colors.textMuted, textAlign: isAr ? 'right' : 'left' }]}&gt;
+                  />
+                </View>
+              </View>
+              <Text style={[styles.phoneHint, { color: colors.textMuted, textAlign: isAr ? 'right' : 'left' }]}>
                 {isAr ? `سيتم الإرسال إلى: ${fullPhone}` : `Will send to: ${fullPhone}`}
-              &lt;/Text&gt;
+              </Text>
 
-              &lt;Button
+              <Button
                 label={isAr ? 'إرسال رمز التحقق' : 'Send Verification Code'}
                 onPress={handleSendSmsOtp}
                 loading={smsLoading}
                 size="lg"
                 style={styles.submitBtn}
-              /&gt;
-            &lt;/&gt;
+              />
+            </>
           ) : (
-            &lt;&gt;
-              &lt;View style={styles.otpHeader}&gt;
-                &lt;View style={[styles.otpIconWrap, { backgroundColor: '#dcfce7' }]}&gt;
-                  &lt;MaterialIcons name="sms" size={32} color="#16a34a" /&gt;
-                &lt;/View&gt;
-                &lt;Text style={[styles.otpTitle, { color: colors.textPrimary }]}&gt;
+            <>
+              <View style={styles.otpHeader}>
+                <View style={[styles.otpIconWrap, { backgroundColor: '#dcfce7' }]}>
+                  <MaterialIcons name="sms" size={32} color="#16a34a" />
+                </View>
+                <Text style={[styles.otpTitle, { color: colors.textPrimary }]}>
                   {isAr ? 'تحقق من هاتفك' : 'Check Your Phone'}
-                &lt;/Text&gt;
-                &lt;Text style={[styles.otpSub, { color: colors.textSecondary }]}&gt;
+                </Text>
+                <Text style={[styles.otpSub, { color: colors.textSecondary }]}>
                   {isAr ? 'أدخل الرمز المرسل إلى' : 'Enter the code sent to'}
-                &lt;/Text&gt;
-                &lt;Text style={[styles.otpEmail, { color: colors.primary }]}&gt;{fullPhone}&lt;/Text&gt;
-              &lt;/View&gt;
+                </Text>
+                <Text style={[styles.otpEmail, { color: colors.primary }]}>{fullPhone}</Text>
+              </View>
 
-              &lt;Input
+              <Input
                 label={isAr ? 'رمز التحقق' : 'Verification Code'}
                 placeholder="0  0  0  0"
                 value={smsOtp}
@@ -477,57 +478,57 @@ export default function LoginScreen() {
                 textAlign="center"
                 returnKeyType="done"
                 onSubmitEditing={handleVerifySmsOtp}
-              /&gt;
+              />
 
-              &lt;Button
-                label={isAr ? 'تحقق وتسجيل الدخول' : 'Verify &amp; Sign In'}
+              <Button
+                label={isAr ? 'تحقق وتسجيل الدخول' : 'Verify & Sign In'}
                 onPress={handleVerifySmsOtp}
                 loading={smsLoading}
                 size="lg"
-              /&gt;
-              &lt;Pressable style={styles.link} onPress={resetSms}&gt;
-                &lt;Text style={[styles.linkText, { color: colors.primary }]}&gt;
+              />
+              <Pressable style={styles.link} onPress={resetSms}>
+                <Text style={[styles.linkText, { color: colors.primary }]}>
                   {isAr ? 'تغيير رقم الهاتف' : 'Change phone number'}
-                &lt;/Text&gt;
-              &lt;/Pressable&gt;
-              &lt;Pressable style={styles.link} onPress={handleSendSmsOtp}&gt;
-                &lt;Text style={[styles.linkText, { color: colors.textMuted }]}&gt;
+                </Text>
+              </Pressable>
+              <Pressable style={styles.link} onPress={handleSendSmsOtp}>
+                <Text style={[styles.linkText, { color: colors.textMuted }]}>
                   {isAr ? 'إعادة إرسال الرمز' : 'Resend code'}
-                &lt;/Text&gt;
-              &lt;/Pressable&gt;
-            &lt;/&gt;
+                </Text>
+              </Pressable>
+            </>
           )}
-        &lt;/&gt;
+        </>
       ) : (
         /* ══ EMAIL AUTH ══ */
-        &lt;&gt;
+        <>
           {mode !== 'otp' ? (
-            &lt;View style={[styles.tabs, { backgroundColor: colors.background }]}&gt;
-              {(['login', 'register'] as const).map(tab =&gt; (
-                &lt;Pressable
+            <View style={[styles.tabs, { backgroundColor: colors.background }]}>
+              {(['login', 'register'] as const).map(tab => (
+                <Pressable
                   key={tab}
-                  style={[styles.tab, mode === tab &amp;&amp; [styles.tabActive, { backgroundColor: colors.primary, ...Shadow.colored }]]}
-                  onPress={() =&gt; setMode(tab)}
-                &gt;
-                  &lt;Text style={[styles.tabText, { color: colors.textMuted }, mode === tab &amp;&amp; styles.tabTextActive]}&gt;
+                  style={[styles.tab, mode === tab && [styles.tabActive, { backgroundColor: colors.primary, ...Shadow.colored }]]}
+                  onPress={() => setMode(tab)}
+                >
+                  <Text style={[styles.tabText, { color: colors.textMuted }, mode === tab && styles.tabTextActive]}>
                     {tab === 'login' ? t.signIn : t.register}
-                  &lt;/Text&gt;
-                &lt;/Pressable&gt;
+                  </Text>
+                </Pressable>
               ))}
-            &lt;/View&gt;
+            </View>
           ) : null}
 
           {mode === 'otp' ? (
-            &lt;&gt;
-              &lt;View style={styles.otpHeader}&gt;
-                &lt;View style={[styles.otpIconWrap, { backgroundColor: colors.primaryGhost }]}&gt;
-                  &lt;MaterialIcons name="mark-email-unread" size={32} color={colors.primary} /&gt;
-                &lt;/View&gt;
-                &lt;Text style={[styles.otpTitle, { color: colors.textPrimary }]}&gt;{t.checkEmail}&lt;/Text&gt;
-                &lt;Text style={[styles.otpSub, { color: colors.textSecondary }]}&gt;{t.codeSentTo}&lt;/Text&gt;
-                &lt;Text style={[styles.otpEmail, { color: colors.primary }]}&gt;{email}&lt;/Text&gt;
-              &lt;/View&gt;
-              &lt;Input
+            <>
+              <View style={styles.otpHeader}>
+                <View style={[styles.otpIconWrap, { backgroundColor: colors.primaryGhost }]}>
+                  <MaterialIcons name="mark-email-unread" size={32} color={colors.primary} />
+                </View>
+                <Text style={[styles.otpTitle, { color: colors.textPrimary }]}>{t.checkEmail}</Text>
+                <Text style={[styles.otpSub, { color: colors.textSecondary }]}>{t.codeSentTo}</Text>
+                <Text style={[styles.otpEmail, { color: colors.primary }]}>{email}</Text>
+              </View>
+              <Input
                 label={t.verificationCode}
                 placeholder="0  0  0  0"
                 value={otp}
@@ -537,114 +538,114 @@ export default function LoginScreen() {
                 textAlign="center"
                 returnKeyType="done"
                 onSubmitEditing={handleVerifyOTP}
-              /&gt;
-              &lt;Button label={t.verifyCreate} onPress={handleVerifyOTP} loading={operationLoading} size="lg" /&gt;
-              &lt;Pressable style={styles.link} onPress={() =&gt; setMode('register')}&gt;
-                &lt;Text style={[styles.linkText, { color: colors.primary }]}&gt;{t.backToRegistration}&lt;/Text&gt;
-              &lt;/Pressable&gt;
-            &lt;/&gt;
+              />
+              <Button label={t.verifyCreate} onPress={handleVerifyOTP} loading={operationLoading} size="lg" />
+              <Pressable style={styles.link} onPress={() => setMode('register')}>
+                <Text style={[styles.linkText, { color: colors.primary }]}>{t.backToRegistration}</Text>
+              </Pressable>
+            </>
           ) : mode === 'login' ? (
-            &lt;&gt;
-              &lt;View style={styles.formHeader}&gt;
-                &lt;Text style={[styles.formTitle, { color: colors.textPrimary }]}&gt;{t.welcomeBack}&lt;/Text&gt;
-                &lt;Text style={[styles.formSub, { color: colors.textMuted }]}&gt;{t.signInAccount}&lt;/Text&gt;
-              &lt;/View&gt;
-              &lt;Input label={t.emailAddress} placeholder={t.emailPlaceholder} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" /&gt;
-              &lt;Input
+            <>
+              <View style={styles.formHeader}>
+                <Text style={[styles.formTitle, { color: colors.textPrimary }]}>{t.welcomeBack}</Text>
+                <Text style={[styles.formSub, { color: colors.textMuted }]}>{t.signInAccount}</Text>
+              </View>
+              <Input label={t.emailAddress} placeholder={t.emailPlaceholder} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+              <Input
                 label={t.password}
                 placeholder={t.passwordPlaceholder}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 rightElement={
-                  &lt;Pressable onPress={togglePassword} hitSlop={8}&gt;
-                    &lt;MaterialIcons name={showPassword ? 'visibility' : 'visibility-off'} size={20} color={colors.textMuted} /&gt;
-                  &lt;/Pressable&gt;
+                  <Pressable onPress={togglePassword} hitSlop={8}>
+                    <MaterialIcons name={showPassword ? 'visibility' : 'visibility-off'} size={20} color={colors.textMuted} />
+                  </Pressable>
                 }
-              /&gt;
-              &lt;Button label={t.signIn} onPress={handleLogin} loading={operationLoading} size="lg" /&gt;
-            &lt;/&gt;
+              />
+              <Button label={t.signIn} onPress={handleLogin} loading={operationLoading} size="lg" />
+            </>
           ) : (
-            &lt;&gt;
-              &lt;View style={styles.formHeader}&gt;
-                &lt;Text style={[styles.formTitle, { color: colors.textPrimary }]}&gt;{t.createAccount}&lt;/Text&gt;
-                &lt;Text style={[styles.formSub, { color: colors.textMuted }]}&gt;{t.joinToBuySell}&lt;/Text&gt;
-              &lt;/View&gt;
-              &lt;Input label={t.emailAddress} placeholder={t.emailPlaceholder} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" /&gt;
-              &lt;Input
+            <>
+              <View style={styles.formHeader}>
+                <Text style={[styles.formTitle, { color: colors.textPrimary }]}>{t.createAccount}</Text>
+                <Text style={[styles.formSub, { color: colors.textMuted }]}>{t.joinToBuySell}</Text>
+              </View>
+              <Input label={t.emailAddress} placeholder={t.emailPlaceholder} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+              <Input
                 label={t.password}
                 placeholder={t.minPassword}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 rightElement={
-                  &lt;Pressable onPress={togglePassword} hitSlop={8}&gt;
-                    &lt;MaterialIcons name={showPassword ? 'visibility' : 'visibility-off'} size={20} color={colors.textMuted} /&gt;
-                  &lt;/Pressable&gt;
+                  <Pressable onPress={togglePassword} hitSlop={8}>
+                    <MaterialIcons name={showPassword ? 'visibility' : 'visibility-off'} size={20} color={colors.textMuted} />
+                  </Pressable>
                 }
-              /&gt;
-              &lt;Input
+              />
+              <Input
                 label={t.confirmPassword}
                 placeholder={t.repeatPassword}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 secureTextEntry={!showConfirmPassword}
                 rightElement={
-                  &lt;Pressable onPress={toggleConfirmPassword} hitSlop={8}&gt;
-                    &lt;MaterialIcons name={showConfirmPassword ? 'visibility' : 'visibility-off'} size={20} color={colors.textMuted} /&gt;
-                  &lt;/Pressable&gt;
+                  <Pressable onPress={toggleConfirmPassword} hitSlop={8}>
+                    <MaterialIcons name={showConfirmPassword ? 'visibility' : 'visibility-off'} size={20} color={colors.textMuted} />
+                  </Pressable>
                 }
-              /&gt;
-              &lt;Button label={t.continueCode} onPress={handleSendOTP} loading={operationLoading} size="lg" /&gt;
-            &lt;/&gt;
+              />
+              <Button label={t.continueCode} onPress={handleSendOTP} loading={operationLoading} size="lg" />
+            </>
           )}
 
           {mode !== 'otp' ? (
-            &lt;Text style={styles.footerHint}&gt;
+            <Text style={styles.footerHint}>
               {mode === 'login' ? t.noAccount : t.haveAccount}
-              &lt;Text style={styles.footerLink} onPress={() =&gt; setMode(mode === 'login' ? 'register' : 'login')}&gt;
+              <Text style={styles.footerLink} onPress={() => setMode(mode === 'login' ? 'register' : 'login')}>
                 {mode === 'login' ? t.register : t.signIn}
-              &lt;/Text&gt;
-            &lt;/Text&gt;
+              </Text>
+            </Text>
           ) : null}
-        &lt;/&gt;
+        </>
       )}
-    &lt;/View&gt;
+    </View>
 
     {/* ── GOOGLE DIVIDER + BUTTON ── */}
-    &lt;View style={styles.dividerRow}&gt;
-      &lt;View style={[styles.dividerLine, { backgroundColor: 'rgba(255,255,255,0.2)' }]} /&gt;
-      &lt;Text style={[styles.dividerText, { color: 'rgba(255,255,255,0.55)' }]}&gt;
+    <View style={styles.dividerRow}>
+      <View style={[styles.dividerLine, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
+      <Text style={[styles.dividerText, { color: 'rgba(255,255,255,0.55)' }]}>
         {isAr ? 'أو' : 'or'}
-      &lt;/Text&gt;
-      &lt;View style={[styles.dividerLine, { backgroundColor: 'rgba(255,255,255,0.2)' }]} /&gt;
-    &lt;/View&gt;
-    &lt;Pressable
+      </Text>
+      <View style={[styles.dividerLine, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
+    </View>
+    <Pressable
       style={[styles.googleBtn, { opacity: googleLoading ? 0.75 : 1 }]}
       onPress={handleGoogleSignIn}
       disabled={googleLoading}
-    &gt;
-      &lt;View style={styles.googleIconWrap}&gt;
-        &lt;Text style={styles.googleG}&gt;G&lt;/Text&gt;
-      &lt;/View&gt;
-      &lt;Text style={styles.googleBtnText}&gt;
+    >
+      <View style={styles.googleIconWrap}>
+        <Text style={styles.googleG}>G</Text>
+      </View>
+      <Text style={styles.googleBtnText}>
         {isAr ? 'المتابعة عبر Google' : 'Continue with Google'}
-      &lt;/Text&gt;
-    &lt;/Pressable&gt;
+      </Text>
+    </Pressable>
 
     {/* SMS info note */}
     {authMethod === 'sms' ? (
-      &lt;View style={[styles.smsNote, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: 'rgba(255,255,255,0.2)' }]}&gt;
-        &lt;MaterialIcons name="info-outline" size={14} color="rgba(255,255,255,0.7)" /&gt;
-        &lt;Text style={styles.smsNoteText}&gt;
+      <View style={[styles.smsNote, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: 'rgba(255,255,255,0.2)' }]}>
+        <MaterialIcons name="info-outline" size={14} color="rgba(255,255,255,0.7)" />
+        <Text style={styles.smsNoteText}>
           {isAr
             ? 'سيتم إنشاء حساب جديد تلقائياً إذا لم تكن مسجلاً من قبل.'
             : 'A new account will be created automatically if you are not registered yet.'}
-        &lt;/Text&gt;
-      &lt;/View&gt;
+        </Text>
+      </View>
     ) : null}
-  &lt;/ScrollView&gt;
-&lt;/KeyboardAvoidingView&gt;
+  </ScrollView>
+</KeyboardAvoidingView>
 
   );
 }
