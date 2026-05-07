@@ -185,15 +185,16 @@ export default function LoginScreen() {
         return;
       }
 
-      // Open OAuth in system browser; closes when it sees onspaceapp:// scheme
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      // ── Open OAuth browser and capture the callback ─────────────────────
+      // On Android, Chrome Custom Tabs don't reliably fire the custom-scheme
+      // redirect back to WebBrowser. We use a Linking listener as a primary
+      // handler for Android, and keep openAuthSessionAsync result as fallback.
+      let linkingResolved = false;
 
-      if (result.type === 'success' && result.url) {
-        const callbackUrl = result.url;
+      const processCallbackUrl = async (callbackUrl: string) => {
         let params: URLSearchParams;
         try {
           const parsed = new URL(callbackUrl);
-          // Supabase may use hash (#access_token=...) or query (?code=...) — merge both
           const hashParams = parsed.hash?.startsWith('#')
             ? new URLSearchParams(parsed.hash.slice(1))
             : new URLSearchParams();
@@ -212,7 +213,8 @@ export default function LoginScreen() {
 
         const code = params.get('code');
         if (code) {
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          const supabase2 = getSupabaseClient();
+          const { error: exchangeError } = await supabase2.auth.exchangeCodeForSession(code);
           if (exchangeError) {
             showAlert(isAr ? 'خطأ' : 'Error', exchangeError.message);
             return;
@@ -224,7 +226,8 @@ export default function LoginScreen() {
         const accessToken = params.get('access_token');
         const refreshToken = params.get('refresh_token');
         if (accessToken && refreshToken) {
-          const { error: sessionError } = await supabase.auth.setSession({
+          const supabase2 = getSupabaseClient();
+          const { error: sessionError } = await supabase2.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
@@ -237,7 +240,28 @@ export default function LoginScreen() {
         }
 
         showAlert(isAr ? 'خطأ' : 'Error', isAr ? 'لم يتم استلام بيانات الجلسة' : 'No session data received');
-      } else if (result.type === 'cancel' || result.type === 'dismiss') {
+      };
+
+      // Register deep-link listener BEFORE opening the browser (catches Android redirect)
+      const linkingSubscription = Linking.addEventListener('url', async ({ url: cbUrl }) => {
+        if (!cbUrl.startsWith('onspaceapp://')) return;
+        if (linkingResolved) return;
+        linkingResolved = true;
+        linkingSubscription.remove();
+        WebBrowser.dismissAuthSession();
+        setGoogleLoading(true);
+        await processCallbackUrl(cbUrl);
+        setGoogleLoading(false);
+      });
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      linkingSubscription.remove(); // clean up if iOS handled it via result
+
+      // iOS / non-Android: process result directly from openAuthSessionAsync
+      if (!linkingResolved && result.type === 'success' && result.url) {
+        linkingResolved = true;
+        await processCallbackUrl(result.url);
+      } else if (!linkingResolved && (result.type === 'cancel' || result.type === 'dismiss')) {
         // User cancelled — do nothing
       }
     } catch (e: any) {
