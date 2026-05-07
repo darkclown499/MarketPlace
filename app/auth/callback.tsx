@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, Pressable, StyleSheet, I18nManager } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, ActivityIndicator, Pressable, StyleSheet, I18nManager, Platform } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { getSupabaseClient } from '@/template';
 
@@ -41,10 +41,48 @@ export default function AuthCallbackScreen() {
     setStatus('error');
   };
 
+  const params = useLocalSearchParams<{ code?: string; error?: string; error_description?: string }>();
+
   useEffect(() => {
-    // ── MOBILE: window exists in RN but window.location is undefined ────
-    if (typeof window === 'undefined' || !window.location) {
-      setTimeout(goToTabs, 300);
+    // ── MOBILE: use Platform.OS for reliable detection ────
+    if (Platform.OS !== 'web') {
+      const handleMobile = async () => {
+        const supabase = getSupabaseClient();
+
+        // Check for OAuth error
+        const oauthErr = params.error_description ?? params.error;
+        if (oauthErr) {
+          showError(decodeURIComponent(oauthErr as string));
+          return;
+        }
+
+        // If PKCE code is present in the deep link params, exchange it
+        if (params.code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(params.code as string);
+          if (error) {
+            // Try checking if session already exists (Linking listener in login.tsx may have handled it)
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) { goToTabs(); return; }
+            showError(error.message);
+            return;
+          }
+          goToTabs();
+          return;
+        }
+
+        // No code in params — check if session was already set by Linking listener
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) { goToTabs(); return; }
+
+        // Wait briefly then check again (Linking listener may still be processing)
+        setTimeout(async () => {
+          const { data: { session: s2 } } = await supabase.auth.getSession();
+          if (s2) goToTabs();
+          else showError();
+        }, 2000);
+      };
+
+      handleMobile();
       return;
     }
 
