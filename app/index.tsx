@@ -27,7 +27,7 @@ export default function RootScreen() {
   if (showBeta) return <Redirect href="/beta-warning" />;
 
   return (
-    <AuthRouter loginRoute="/login" excludeRoutes={['/login', '/onboarding', '/beta-warning', '/ad', '/search', '/category']}>
+    <AuthRouter loginRoute="/login" excludeRoutes={['/login', '/onboarding', '/beta-warning', '/ad', '/search', '/category', '/auth', '/favorites']}>
       <Redirect href="/(tabs)" />
     </AuthRouter>
   );

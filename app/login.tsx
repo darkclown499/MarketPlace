@@ -76,9 +76,9 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     if (!email.trim() || !password) return showAlert(t.missingFields, t.fillAllFields);
     if (operationLoading || verifying) return;
-    const { error, user } = await signInWithPassword(email.trim().toLowerCase(), password);
+    const { error } = await signInWithPassword(email.trim().toLowerCase(), password);
     if (error) return showAlert(t.loginFailed, error);
-    if (user) router.replace('/(tabs)');
+    // AuthRouter in app/index.tsx handles redirect to /(tabs) automatically
   };
 
 
@@ -100,9 +100,9 @@ export default function LoginScreen() {
     if (verifying) return;
     setVerifying(true);
     try {
-      const { error, user } = await verifyOTPAndLogin(email.trim(), otp.trim(), { password });
+      const { error } = await verifyOTPAndLogin(email.trim(), otp.trim(), { password });
       if (error) { showAlert(t.verificationFailed, error); return; }
-      if (user) router.replace('/(tabs)');
+      // AuthRouter in app/index.tsx handles redirect to /(tabs) automatically
     } finally {
       setVerifying(false);
     }
@@ -152,19 +152,19 @@ export default function LoginScreen() {
           setGoogleLoading(false);
           return;
         }
-        // Navigate to Google OAuth — use window.top.location.href to break out of
-        // any live-preview iframe. Falls back to current window if cross-origin.
+        // Navigate to Google OAuth.
+        // Try window.top first to escape any live-preview iframe.
+        // Falls back to current window on cross-origin restriction.
         try {
-          if (window.top) {
+          if (window.top && window.top !== window) {
             window.top.location.href = data.url;
           } else {
             window.location.href = data.url;
           }
         } catch {
-          // Cross-origin iframe restriction — navigate current frame directly
           window.location.href = data.url;
         }
-        // Don't reset loading — page is navigating away
+        // Don't reset googleLoading — page is navigating away
         return;
       }
 

@@ -7,27 +7,33 @@ import { getSupabaseClient } from '@/template';
 type Status = 'loading' | 'error';
 
 /**
- * OAuth callback screen.
+ * OAuth callback screen — handles Supabase redirect after Google sign-in.
  *
- * On WEB: Supabase redirects here with ?code=... (PKCE) or #access_token=... (implicit).
- *   1. Try exchangeCodeForSession(code) for PKCE flow.
- *   2. If that fails or no code, try getSession() — Supabase may have already set the session.
- *   3. Fallback: redirect to tabs anyway and let AuthRouter sort it out.
+ * Flow (WEB):
+ *   1. Register onAuthStateChange listener immediately — fires as soon as
+ *      Supabase processes the code/token in the URL hash/params.
+ *   2. Parse URL for explicit tokens (implicit flow) or PKCE code.
+ *   3. If PKCE code found, call exchangeCodeForSession.
+ *   4. After 5 seconds with no SIGNED_IN event, check session manually.
+ *   5. Show error card with retry button if nothing works.
  *
- * On MOBILE: expo-web-browser captures the redirect URL and handles it in login.tsx.
- *   This screen is only hit as a rare fallback — redirect immediately to tabs.
+ * Flow (MOBILE):
+ *   expo-web-browser captures the redirect in login.tsx.
+ *   This screen is only reached as a rare fallback — redirect immediately.
  */
 export default function AuthCallbackScreen() {
   const router = useRouter();
   const [status, setStatus] = useState<Status>('loading');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Detect language from RTL setting or navigator
+  // Detect language from RTL setting or browser navigator
   const isAr =
     I18nManager.isRTL ||
     (typeof navigator !== 'undefined' && navigator.language?.startsWith('ar'));
 
-  const handleError = (msg?: string) => {
+  const goToTabs = () => router.replace('/(tabs)');
+
+  const showError = (msg?: string) => {
     const fallback = isAr
       ? 'فشل تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.'
       : 'Google sign-in failed. Please try again.';
@@ -36,83 +42,109 @@ export default function AuthCallbackScreen() {
   };
 
   useEffect(() => {
-    const handle = async () => {
-      if (typeof window !== 'undefined') {
-        try {
-          const url = new URL(window.location.href);
-          const supabase = getSupabaseClient();
+    // ── MOBILE: just redirect, login.tsx already handled the token ───────
+    if (typeof window === 'undefined') {
+      setTimeout(goToTabs, 300);
+      return;
+    }
 
-          // ── Check for OAuth error params first ───────────────────────────
-          const oauthError =
-            url.searchParams.get('error_description') ??
-            url.searchParams.get('error');
-          if (oauthError) {
-            handleError(decodeURIComponent(oauthError));
-            return;
-          }
+    const supabase = getSupabaseClient();
+    let resolved = false;
 
-          // ── 1. Hash-based tokens (implicit flow) ──────────────────────────
-          if (url.hash && url.hash.includes('access_token')) {
-            const hashParams = new URLSearchParams(url.hash.slice(1));
-            const accessToken = hashParams.get('access_token');
-            const refreshToken = hashParams.get('refresh_token');
-            if (accessToken && refreshToken) {
-              const { error } = await supabase.auth.setSession({
-                access_token: accessToken,
-                refresh_token: refreshToken,
-              });
-              if (error) { handleError(error.message); return; }
-              router.replace('/(tabs)');
-              return;
-            }
-          }
-
-          // ── 2. PKCE code flow ─────────────────────────────────────────────
-          const code = url.searchParams.get('code');
-          if (code) {
-            const { error } = await supabase.auth.exchangeCodeForSession(code);
-            if (!error) {
-              router.replace('/(tabs)');
-              return;
-            }
-            // Exchange failed — fall through to session check
-          }
-
-          // ── 3. Check if session was set by Supabase automatically ─────────
-          await new Promise(r => setTimeout(r, 800));
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            router.replace('/(tabs)');
-            return;
-          }
-
-          // ── 4. Auth state change listener (last resort) ───────────────────
-          const didSignIn = await new Promise<boolean>((resolve) => {
-            const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-              if (event === 'SIGNED_IN') {
-                subscription.unsubscribe();
-                resolve(true);
-              }
-            });
-            setTimeout(() => { subscription.unsubscribe(); resolve(false); }, 3000);
-          });
-
-          if (didSignIn) {
-            router.replace('/(tabs)');
-          } else {
-            handleError();
-          }
-        } catch (e: any) {
-          handleError(e?.message);
-        }
-        return;
-      }
-
-      // ── MOBILE fallback ───────────────────────────────────────────────────
-      setTimeout(() => router.replace('/(tabs)'), 300);
+    const resolve = (success: boolean, errMsg?: string) => {
+      if (resolved) return;
+      resolved = true;
+      unsubscribe?.();
+      clearTimeout(timeoutId);
+      if (success) goToTabs();
+      else showError(errMsg);
     };
 
-    handle();
+    // ── 1. Listen for auth state change (fires as soon as Supabase sets session) ──
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        resolve(true);
+      } else if (event === 'SIGNED_OUT') {
+        resolve(false);
+      }
+    });
+    const unsubscribe = () => subscription.unsubscribe();
+
+    // ── 2. Timeout fallback: after 6 seconds, check session manually ───────
+    const timeoutId = setTimeout(async () => {
+      if (resolved) return;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          resolve(true);
+        } else {
+          resolve(false);
+        }
+      } catch {
+        resolve(false);
+      }
+    }, 6000);
+
+    // ── 3. Parse URL immediately for explicit tokens or PKCE code ──────────
+    const handleUrl = async () => {
+      try {
+        const url = new URL(window.location.href);
+
+        // Check for OAuth error
+        const oauthError =
+          url.searchParams.get('error_description') ??
+          url.searchParams.get('error');
+        if (oauthError) {
+          resolve(false, decodeURIComponent(oauthError));
+          return;
+        }
+
+        // Implicit flow: access_token in hash
+        if (url.hash?.includes('access_token')) {
+          const hashParams = new URLSearchParams(url.hash.slice(1));
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+          if (accessToken && refreshToken) {
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            if (error) resolve(false, error.message);
+            // onAuthStateChange will fire SIGNED_IN → resolve(true)
+            return;
+          }
+        }
+
+        // PKCE flow: code in query params
+        const code = url.searchParams.get('code');
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            // Exchange failed — fall through to onAuthStateChange timeout
+            // Don't call resolve(false) yet — session might already be set
+          }
+          // onAuthStateChange fires SIGNED_IN if exchange succeeded
+          return;
+        }
+
+        // No code or token in URL — check if session already exists
+        // (Supabase may have set it via implicit flow without hash)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          resolve(true);
+        }
+        // else: wait for onAuthStateChange timeout
+      } catch (e: any) {
+        resolve(false, e?.message);
+      }
+    };
+
+    handleUrl();
+
+    return () => {
+      unsubscribe();
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   if (status === 'error') {
@@ -141,10 +173,10 @@ export default function AuthCallbackScreen() {
 
           <Pressable
             style={styles.homeLink}
-            onPress={() => router.replace('/(tabs)')}
+            onPress={goToTabs}
           >
             <Text style={styles.homeLinkText}>
-              {isAr ? 'تخطي والدخول كزائر' : 'Skip and browse'}
+              {isAr ? 'تخطي والتصفح كزائر' : 'Skip and browse'}
             </Text>
           </Pressable>
         </View>
@@ -178,8 +210,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
   },
-
-  // Error card
   card: {
     backgroundColor: '#fff',
     borderRadius: 20,
