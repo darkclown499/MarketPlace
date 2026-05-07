@@ -127,12 +127,9 @@ export default function LoginScreen() {
   };
 
   // ── Google Sign-In ──
+  // ── Google Sign-In ──
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
-
-    // FIX 3: تعريف linkingSubscription خارج try لضمان إزالته في catch أيضاً
-    let linkingSubscription: ReturnType<typeof Linking.addEventListener> | null = null;
-    let linkingResolved = false;
 
     try {
       const supabase = getSupabaseClient();
@@ -158,15 +155,15 @@ export default function LoginScreen() {
         try {
           await Linking.openURL(data.url);
         } catch {
-          try {
-            window.location.href = data.url;
-          } catch (_) {}
+          try { window.location.href = data.url; } catch (_) {}
         }
-        // لا نعيد ضبط googleLoading — الصفحة تنتقل بعيداً
         return;
       }
 
-      // ── MOBILE ──
+      // ── MOBILE (Android + iOS) ──────────────────────────────────────────
+      // على Android، Chrome Custom Tabs لا يعيد التوجيه لـ custom scheme.
+      // الحل: نفتح المتصفح ونعمل polling على الـ session حتى يسجل الدخول.
+
       const redirectTo = 'onspaceapp://auth/callback';
 
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -184,93 +181,132 @@ export default function LoginScreen() {
         return;
       }
 
-      const processCallbackUrl = async (callbackUrl: string) => {
-        let params: URLSearchParams;
-        try {
-          const parsed = new URL(callbackUrl);
-          const hashParams = parsed.hash?.startsWith('#')
-            ? new URLSearchParams(parsed.hash.slice(1))
-            : new URLSearchParams();
-          params = new URLSearchParams(parsed.searchParams);
-          hashParams.forEach((v, k) => params.set(k, v));
-        } catch {
-          showAlert(isAr ? 'خطأ' : 'Error', isAr ? 'رابط غير صالح' : 'Invalid callback URL');
-          return;
-        }
+      // محاولة iOS أولاً عبر openAuthSessionAsync
+      if (Platform.OS === 'ios') {
+        let linkingSubscription: ReturnType<typeof Linking.addEventListener> | null = null;
+        let resolved = false;
 
-        const oauthErr = params.get('error_description') ?? params.get('error');
-        if (oauthErr) {
-          showAlert(isAr ? 'خطأ' : 'Error', oauthErr);
-          return;
-        }
+        linkingSubscription = Linking.addEventListener('url', async ({ url: cbUrl }) => {
+          if (!cbUrl.startsWith('onspaceapp://')) return;
+          if (resolved) return;
+          resolved = true;
+          linkingSubscription?.remove();
+          linkingSubscription = null;
+          WebBrowser.dismissAuthSession();
 
-        const code = params.get('code');
-        if (code) {
-          const supabase2 = getSupabaseClient();
-          const { error: exchangeError } = await supabase2.auth.exchangeCodeForSession(code);
-          if (exchangeError) {
-            showAlert(isAr ? 'خطأ' : 'Error', exchangeError.message);
-            return;
+          try {
+            const parsed = new URL(cbUrl);
+            const hashParams = parsed.hash?.startsWith('#')
+              ? new URLSearchParams(parsed.hash.slice(1))
+              : new URLSearchParams();
+            const params = new URLSearchParams(parsed.searchParams);
+            hashParams.forEach((v, k) => params.set(k, v));
+
+            const code = params.get('code');
+            if (code) {
+              const { error: ex } = await supabase.auth.exchangeCodeForSession(code);
+              if (ex) { showAlert(isAr ? 'خطأ' : 'Error', ex.message); return; }
+              router.replace('/(tabs)');
+              return;
+            }
+
+            const at = params.get('access_token');
+            const rt = params.get('refresh_token');
+            if (at && rt) {
+              const { error: se } = await supabase.auth.setSession({ access_token: at, refresh_token: rt });
+              if (se) { showAlert(isAr ? 'خطأ' : 'Error', se.message); return; }
+              router.replace('/(tabs)');
+            }
+          } catch (e: any) {
+            showAlert(isAr ? 'خطأ' : 'Error', e.message);
+          } finally {
+            setGoogleLoading(false);
           }
-          router.replace('/(tabs)');
-          return;
-        }
+        });
 
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        if (accessToken && refreshToken) {
-          const supabase2 = getSupabaseClient();
-          const { error: sessionError } = await supabase2.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (sessionError) {
-            showAlert(isAr ? 'خطأ' : 'Error', sessionError.message);
-            return;
-          }
-          router.replace('/(tabs)');
-          return;
-        }
-
-        showAlert(isAr ? 'خطأ' : 'Error', isAr ? 'لم يتم استلام بيانات الجلسة' : 'No session data received');
-      };
-
-      // FIX 3: تسجيل الـ listener وتخزينه في المتغير الخارجي
-      linkingSubscription = Linking.addEventListener('url', async ({ url: cbUrl }) => {
-        if (!cbUrl.startsWith('onspaceapp://')) return;
-        if (linkingResolved) return;
-        linkingResolved = true;
+        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
         linkingSubscription?.remove();
         linkingSubscription = null;
-        WebBrowser.dismissAuthSession();
-        setGoogleLoading(true);
-        await processCallbackUrl(cbUrl);
-        // FIX 4: إعادة ضبط googleLoading هنا بشكل صحيح بعد انتهاء المعالجة
-        setGoogleLoading(false);
+
+        if (!resolved && result.type === 'success' && result.url) {
+          resolved = true;
+          // معالجة مشابهة للـ Linking listener
+          try {
+            const parsed = new URL(result.url);
+            const hashParams = parsed.hash?.startsWith('#')
+              ? new URLSearchParams(parsed.hash.slice(1))
+              : new URLSearchParams();
+            const params = new URLSearchParams(parsed.searchParams);
+            hashParams.forEach((v, k) => params.set(k, v));
+
+            const code = params.get('code');
+            if (code) {
+              const { error: ex } = await supabase.auth.exchangeCodeForSession(code);
+              if (ex) { showAlert(isAr ? 'خطأ' : 'Error', ex.message); return; }
+              router.replace('/(tabs)');
+              return;
+            }
+
+            const at = params.get('access_token');
+            const rt = params.get('refresh_token');
+            if (at && rt) {
+              const { error: se } = await supabase.auth.setSession({ access_token: at, refresh_token: rt });
+              if (se) { showAlert(isAr ? 'خطأ' : 'Error', se.message); return; }
+              router.replace('/(tabs)');
+            }
+          } catch (e: any) {
+            showAlert(isAr ? 'خطأ' : 'Error', e.message);
+          }
+        }
+
+        if (!resolved) setGoogleLoading(false);
+        return;
+      }
+
+      // ── ANDROID: افتح المتصفح + polling على الـ session ────────────────
+      // نفتح المتصفح بدون انتظار callback لأن Android لا يعيده
+      WebBrowser.openBrowserAsync(data.url, {
+        showTitle: false,
+        enableBarCollapsing: true,
       });
 
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      // polling كل ثانية لمدة 3 دقائق
+      let attempts = 0;
+      const maxAttempts = 180;
 
-      // إزالة الـ listener إن لم يُزل بعد (iOS يعيد النتيجة عبر result)
-      linkingSubscription?.remove();
-      linkingSubscription = null;
+      const pollSession = async (): Promise<void> => {
+        if (attempts >= maxAttempts) {
+          setGoogleLoading(false);
+          showAlert(
+            isAr ? 'انتهت المهلة' : 'Timeout',
+            isAr ? 'لم يتم تسجيل الدخول. حاول مرة أخرى.' : 'Sign-in timed out. Please try again.'
+          );
+          return;
+        }
 
-      if (!linkingResolved && result.type === 'success' && result.url) {
-        linkingResolved = true;
-        await processCallbackUrl(result.url);
-      }
-      // لو المستخدم ألغى — لا شيء
+        attempts++;
+
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData?.session?.user) {
+            // تم تسجيل الدخول بنجاح!
+            WebBrowser.dismissBrowser();
+            setGoogleLoading(false);
+            router.replace('/(tabs)');
+            return;
+          }
+        } catch (_) {}
+
+        // انتظر ثانية وحاول مرة أخرى
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return pollSession();
+      };
+
+      await pollSession();
 
     } catch (e: any) {
-      // FIX 3: ضمان إزالة الـ listener حتى عند الخطأ
-      linkingSubscription?.remove();
-      linkingSubscription = null;
       showAlert(isAr ? 'خطأ' : 'Error', e.message ?? 'Google sign-in failed');
-    } finally {
-      // FIX 4: إعادة ضبط googleLoading فقط إن لم يكن الـ listener هو من يتولى الأمر
-      if (!linkingResolved) {
-        setGoogleLoading(false);
-      }
+      setGoogleLoading(false);
     }
   };
 
