@@ -152,9 +152,14 @@ export default function LoginScreen() {
           setGoogleLoading(false);
           return;
         }
-        // Navigate the browser to the Google OAuth page
-        window.location.href = data.url;
-        // Page navigates away — no need to setGoogleLoading(false)
+        // Navigate to Google OAuth — use _top to break out of any iframe (live preview)
+        // and _blank as fallback if _top is blocked by the browser.
+        try {
+          window.open(data.url, '_top');
+        } catch {
+          window.location.href = data.url;
+        }
+        // Don't reset loading — page is navigating away
         return;
       }
 
