@@ -131,27 +131,30 @@ export default function LoginScreen() {
       const supabase = getSupabaseClient();
 
       if (Platform.OS === 'web') {
-        // ── WEB: let Supabase redirect the browser directly ──────────────────
-        // On web, openAuthSessionAsync redirects the page away and never returns
-        // a 'success' result. Instead, we use skipBrowserRedirect: false so
-        // Supabase/Google redirect the browser back to /auth/callback, where
-        // auth/callback.tsx calls exchangeCodeForSession and redirects to tabs.
+        // ── WEB: get OAuth URL from Supabase then manually navigate ──────────
+        // Using skipBrowserRedirect: true so we get the URL back, then we
+        // navigate with window.location.href ourselves. This works reliably
+        // in both the live preview iframe and production.
         const redirectTo = typeof window !== 'undefined'
           ? `${window.location.origin}/auth/callback`
           : '';
 
-        const { error } = await supabase.auth.signInWithOAuth({
+        const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
             redirectTo,
-            skipBrowserRedirect: false, // let Supabase open the URL directly
+            skipBrowserRedirect: true,
             queryParams: { prompt: 'select_account', access_type: 'offline' },
           },
         });
-        if (error) {
-          showAlert(isAr ? 'خطأ' : 'Error', error.message);
+        if (error || !data?.url) {
+          showAlert(isAr ? 'خطأ' : 'Error', error?.message ?? 'Failed to start Google sign-in');
+          setGoogleLoading(false);
+          return;
         }
-        // Page navigates away — loading state reset is handled by unmount
+        // Navigate the browser to the Google OAuth page
+        window.location.href = data.url;
+        // Page navigates away — no need to setGoogleLoading(false)
         return;
       }
 
