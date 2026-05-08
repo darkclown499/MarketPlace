@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { fetchAds, fetchMyAds, Ad } from '@/services/adsService';
 
 const PAGE_SIZE = 20;
+const INITIAL_PAGE_SIZE = 10; // smaller first fetch = faster first paint
 
 export function useAds(params?: { categoryId?: string; search?: string; maxPrice?: number; condition?: 'new' | 'used' | null }) {
   const [ads, setAds] = useState<Ad[]>([]);
@@ -19,11 +20,11 @@ export function useAds(params?: { categoryId?: string; search?: string; maxPrice
     const { data, error } = await fetchAds({
       ...p,
       condition: p?.condition ?? undefined,
-      limit: PAGE_SIZE,
+      limit: INITIAL_PAGE_SIZE, // fast first load
       offset: 0,
     });
     setAds(data);
-    setHasMore(data.length === PAGE_SIZE);
+    setHasMore(data.length === INITIAL_PAGE_SIZE);
     setError(error);
     setLoading(false);
   }, [params?.categoryId, params?.search, params?.maxPrice, params?.condition]);

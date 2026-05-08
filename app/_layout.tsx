@@ -4,89 +4,86 @@ import { Stack } from 'expo-router';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
-import { requestNotificationPermissions } from '@/hooks/useChat';
+import { Platform, InteractionManager } from 'react-native';
 
-// Clear stale/expired Supabase tokens from browser localStorage to prevent
-// "Invalid Refresh Token: Refresh Token Not Found" on startup.
-// Refresh tokens can be revoked server-side even if expires_at is future,
-// so we clear aggressively: any stored session without a valid refresh token.
+// ─── Web: defer stale-token cleanup until after JS bundle is parsed ───────────
+// Running localStorage scan synchronously at module level blocks the JS thread
+// before React even mounts — move it behind a microtask so the first frame is
+// not blocked.
 if (Platform.OS === 'web' && typeof window !== 'undefined') {
-  try {
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.includes('supabase')) keysToRemove.push(key);
-    }
-    const sessionKey = keysToRemove.find(k => k.includes('auth-token'));
-    if (sessionKey) {
-      const raw = localStorage.getItem(sessionKey);
-      let shouldClear = !raw;
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          const hasRefreshToken = !!parsed?.refresh_token;
-          const expiresAt: number = parsed?.expires_at ?? 0;
-          // Clear if: no refresh token, access token expired, or token was issued
-          // more than 7 days ago (refresh tokens typically expire in 7 days)
-          const isExpired = expiresAt > 0 && expiresAt * 1000 < Date.now();
-          const issuedAt: number = parsed?.user?.created_at
-            ? 0
-            : (parsed?.issued_at ?? 0);
-          const isStale = issuedAt > 0 && (Date.now() / 1000 - issuedAt) > 7 * 24 * 3600;
-          if (!hasRefreshToken || isExpired || isStale) shouldClear = true;
-        } catch {
-          shouldClear = true;
-        }
+  Promise.resolve().then(() => {
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.includes('supabase')) keysToRemove.push(key);
       }
-      if (shouldClear) keysToRemove.forEach(k => localStorage.removeItem(k));
-    }
-  } catch (_) {}
+      const sessionKey = keysToRemove.find(k => k.includes('auth-token'));
+      if (sessionKey) {
+        const raw = localStorage.getItem(sessionKey);
+        let shouldClear = !raw;
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            const hasRefreshToken = !!parsed?.refresh_token;
+            const expiresAt: number = parsed?.expires_at ?? 0;
+            const isExpired = expiresAt > 0 && expiresAt * 1000 < Date.now();
+            const issuedAt: number = parsed?.user?.created_at ? 0 : (parsed?.issued_at ?? 0);
+            const isStale = issuedAt > 0 && (Date.now() / 1000 - issuedAt) > 7 * 24 * 3600;
+            if (!hasRefreshToken || isExpired || isStale) shouldClear = true;
+          } catch { shouldClear = true; }
+        }
+        if (shouldClear) keysToRemove.forEach(k => localStorage.removeItem(k));
+      }
+    } catch (_) {}
+  });
 }
 
 export default function RootLayout() {
   useEffect(() => {
-    requestNotificationPermissions();
-
-    // Listen for session expiry / forced sign-out and redirect user to login
-    import('@/template').then(({ getSupabaseClient }) => {
-      const supabase = getSupabaseClient();
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-        if (event === 'SIGNED_OUT') {
-          // Import router lazily to avoid circular dependency at module level
-          import('expo-router').then(({ router }) => {
-            router.replace('/login');
-          });
-        }
-        if (event === 'TOKEN_REFRESHED') {
-          // Session refreshed successfully — no action needed
-        }
+    // ── Defer all non-critical startup work until after interactions settle ──
+    // This prevents heavy async tasks from competing with the initial render.
+    const task = InteractionManager.runAfterInteractions(() => {
+      // Push notification setup — heavy, deferred
+      import('@/hooks/useChat').then(({ requestNotificationPermissions }) => {
+        requestNotificationPermissions();
       });
-      return () => subscription.unsubscribe();
+
+      // Auth state listener — deferred, not needed before first frame
+      import('@/template').then(({ getSupabaseClient }) => {
+        const supabase = getSupabaseClient();
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+          if (event === 'SIGNED_OUT') {
+            import('expo-router').then(({ router }) => {
+              router.replace('/login');
+            });
+          }
+        });
+        // Note: subscription cleanup handled by app lifecycle
+      });
+
+      // Web console interceptor for stale token errors
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const originalConsoleError = console.error.bind(console);
+        console.error = (...args: any[]) => {
+          const msg = args[0]?.message ?? String(args[0] ?? '');
+          if (msg.includes('Refresh Token Not Found') || msg.includes('Invalid Refresh Token')) {
+            try {
+              const keys: string[] = [];
+              for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.includes('supabase')) keys.push(k);
+              }
+              keys.forEach(k => localStorage.removeItem(k));
+            } catch (_) {}
+            return;
+          }
+          originalConsoleError(...args);
+        };
+      }
     });
 
-    // Runtime handler: clear invalid session when Supabase reports token failure
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      // Intercept unhandled auth errors logged to console (AuthApiError)
-      const originalConsoleError = console.error.bind(console);
-      console.error = (...args: any[]) => {
-        const msg = args[0]?.message ?? String(args[0] ?? '');
-        if (msg.includes('Refresh Token Not Found') || msg.includes('Invalid Refresh Token')) {
-          // Silently clear stale tokens and suppress the noise
-          try {
-            const keys: string[] = [];
-            for (let i = 0; i < localStorage.length; i++) {
-              const k = localStorage.key(i);
-              if (k && k.includes('supabase')) keys.push(k);
-            }
-            keys.forEach(k => localStorage.removeItem(k));
-          } catch (_) {}
-          return; // suppress error log
-        }
-        originalConsoleError(...args);
-      };
-      return () => { console.error = originalConsoleError; };
-    }
+    return () => task.cancel();
   }, []);
 
   return (

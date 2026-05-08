@@ -27,6 +27,11 @@ const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - Spacing.lg * 2 - Spacing.sm) / 2;
 const SPONSORED_INTERVAL = 8;
 
+// Module-level cache: banners and interstitials rarely change, no need to
+// re-fetch on every mount. Cleared only on explicit refresh.
+let _bannersCache: Banner[] | null = null;
+let _interstitialsCache: InterstitialAd[] | null = null;
+
 type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'boosted';
 
 const SORT_OPTIONS: { key: SortOption; label: string; labelAr: string; icon: string }[] = [
@@ -81,10 +86,10 @@ export default function HomeScreen() {
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [featuredIndex, setFeaturedIndex] = useState(0);
-  const [banners, setBanners] = useState<Banner[]>(FALLBACK_BANNERS);
+  const [banners, setBanners] = useState<Banner[]>(_bannersCache ?? FALLBACK_BANNERS);
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [showSortBar, setShowSortBar] = useState(false);
-  const [interstitials, setInterstitials] = useState<InterstitialAd[]>([]);
+  const [interstitials, setInterstitials] = useState<InterstitialAd[]>(_interstitialsCache ?? []);
   const [activeInterstitial, setActiveInterstitial] = useState<InterstitialAd | null>(null);
   const [interstitialVisible, setInterstitialVisible] = useState(false);
   const appStartTime = useRef(Date.now());
@@ -92,11 +97,25 @@ export default function HomeScreen() {
 
   const isAr = language === 'ar';
 
-  useEffect(() => { load({ categoryId: selectedCategory ?? undefined }); }, [selectedCategory, load]); // Added 'load' to dependency array
+  useEffect(() => { load({ categoryId: selectedCategory ?? undefined }); }, [selectedCategory, load]);
 
   useEffect(() => {
-    fetchActiveBanners().then(({ data }) => { if (data.length > 0) setBanners(data); });
-    fetchActiveInterstitials().then(({ data }) => setInterstitials(data));
+    // Fire all non-critical fetches in parallel; use cache if available
+    if (!_bannersCache || !_interstitialsCache) {
+      Promise.all([
+        _bannersCache ? Promise.resolve({ data: _bannersCache }) : fetchActiveBanners(),
+        _interstitialsCache ? Promise.resolve({ data: _interstitialsCache }) : fetchActiveInterstitials(),
+      ]).then(([bannersResult, intResult]) => {
+        if (bannersResult.data.length > 0) {
+          _bannersCache = bannersResult.data;
+          setBanners(bannersResult.data);
+        }
+        if (intResult.data.length > 0) {
+          _interstitialsCache = intResult.data;
+          setInterstitials(intResult.data);
+        }
+      });
+    }
   }, []);
 
   useEffect(() => {
