@@ -8,6 +8,45 @@ serve(async (req) => {
   }
 
   try {
+    const body = await req.json();
+
+    // ── Badge reset shortcut: called when user opens chat and reads messages ──
+    if (body.action === 'reset_badge') {
+      const { user_id } = body as { user_id: string };
+      if (!user_id) {
+        return new Response(
+          JSON.stringify({ error: 'Missing user_id' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      );
+      const { data: profile } = await supabaseAdmin
+        .from('user_profiles')
+        .select('push_token')
+        .eq('id', user_id)
+        .single();
+      const pushToken: string | null = profile?.push_token ?? null;
+      if (pushToken && pushToken.startsWith('ExponentPushToken')) {
+        await fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: pushToken,
+            badge: 0,
+            'content-available': 1,
+            priority: 'normal',
+          }),
+        });
+      }
+      return new Response(
+        JSON.stringify({ ok: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
     const {
       recipient_id,
       sender_name,
@@ -16,7 +55,7 @@ serve(async (req) => {
       recipient_id: string;
       sender_name: string;
       message_preview: string;
-    } = await req.json();
+    } = body;
 
     if (!recipient_id || !sender_name) {
       return new Response(
@@ -78,7 +117,10 @@ serve(async (req) => {
       body: message_preview.substring(0, 100),
       sound: 'default',
       badge: unreadCount,
-      data: { type: 'new_message', recipient_id },
+      // content-available: 1 wakes the app in background on iOS so it can
+      // refresh its own badge count even without a visible notification.
+      'content-available': 1,
+      data: { type: 'new_message', recipient_id, unread_count: unreadCount },
       priority: 'high',
     };
 

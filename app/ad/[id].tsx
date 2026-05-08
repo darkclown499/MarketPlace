@@ -500,6 +500,16 @@ function AdDetailScrollContent({
 
           <Text style={[styles.title, { color: colors.textPrimary }]}>{ad.title}</Text>
 
+          {/* Serial number reference chip */}
+          <View style={[styles.serialRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+            <View style={[styles.serialChip, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
+              <MaterialIcons name="tag" size={13} color={colors.textMuted} />
+              <Text style={[styles.serialText, { color: colors.textMuted }]}>
+                {isAr ? `مرجع #${ad.serial_number}` : `Ref #${ad.serial_number}`}
+              </Text>
+            </View>
+          </View>
+
           <View style={styles.metaRow}>
             {[
               { icon: 'location-on', text: ad.location || 'No location', color: colors.primary },
@@ -812,4 +822,13 @@ const styles = StyleSheet.create({
   relatedName: { fontSize: FontSize.sm, fontWeight: '600', lineHeight: 18 },
   relatedLoc: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
   relatedLocText: { fontSize: 10 },
+
+  // Serial number
+  serialRow: { marginTop: -4 },
+  serialChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderRadius: Radius.full, paddingHorizontal: 10, paddingVertical: 4,
+    borderWidth: 1, alignSelf: 'flex-start',
+  },
+  serialText: { fontSize: FontSize.xs, fontWeight: '500', letterSpacing: 0.2 },
 });

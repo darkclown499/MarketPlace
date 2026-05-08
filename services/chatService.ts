@@ -169,6 +169,11 @@ export async function markMessagesRead(
     .eq('conversation_id', conversationId)
     .neq('sender_id', currentUserId)
     .is('read_at', null);
+
+  // Reset app icon badge to 0 — fire-and-forget
+  supabase.functions.invoke('push-notify', {
+    body: { action: 'reset_badge', user_id: currentUserId },
+  }).catch(() => {});
 }
 
 /** Update typing indicator for the current user in a conversation */
