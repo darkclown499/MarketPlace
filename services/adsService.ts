@@ -45,12 +45,8 @@ export async function fetchAds(params?: {
   maxPrice?: number;
   condition?: 'new' | 'used' | null;
   limit?: number;
-  offset?: number;
 }): Promise<{ data: Ad[]; error: string | null }> {
   const supabase = getSupabaseClient();
-  const limit = params?.limit ?? 20;
-  const offset = params?.offset ?? 0;
-
   let query = supabase
     .from('ads')
     .select(`
@@ -61,7 +57,7 @@ export async function fetchAds(params?: {
     .in('status', ['active', 'featured'])
     .order('boosted_until', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
+    .limit(params?.limit ?? 60);
 
   if (params?.categoryId) query = query.eq('category_id', params.categoryId);
   if (params?.search) query = query.ilike('title', `%${params.search}%`);
@@ -71,7 +67,7 @@ export async function fetchAds(params?: {
   const { data, error } = await query;
   if (error) return { data: [], error: error.message };
 
-  // Sort: boosted (not expired) first
+  // Sort: boosted (not expired) first, then featured, then the rest by created_at
   const now = Date.now();
   const sorted = [...(data as Ad[])].sort((a, b) => {
     const aBoost = a.boosted_until && new Date(a.boosted_until).getTime() > now;

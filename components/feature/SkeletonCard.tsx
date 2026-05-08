@@ -19,24 +19,22 @@ function SkeletonBox({ width: w = '100%', height, borderRadius = Radius.sm, styl
   const shimmer = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const loop = Animated.loop(
+    Animated.loop(
       Animated.sequence([
-        Animated.timing(shimmer, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(shimmer, { toValue: 0, duration: 900, useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 1, duration: 900, useNativeDriver: false }),
+        Animated.timing(shimmer, { toValue: 0, duration: 900, useNativeDriver: false }),
       ])
-    );
-    loop.start();
-    return () => loop.stop();
+    ).start();
   }, []);
 
-  const opacity = shimmer.interpolate({
+  const bg = shimmer.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 0.4],
+    outputRange: [baseColor, shimmerColor],
   });
 
   return (
     <Animated.View
-      style={[{ width: w as any, height, borderRadius, backgroundColor: baseColor, opacity }, style]}
+      style={[{ width: w as any, height, borderRadius, backgroundColor: bg }, style]}
     />
   );
 }

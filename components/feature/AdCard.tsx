@@ -77,8 +77,7 @@ export const AdCard = memo(function AdCard({ ad, width, sponsored, isFavorited =
             source={{ uri: firstImage.url }}
             style={styles.image}
             contentFit="cover"
-            transition={200}
-            cachePolicy="memory-disk"
+            transition={250}
           />
         ) : (
           <View style={[styles.imagePlaceholder, { backgroundColor: colors.surfaceTint }]}>
