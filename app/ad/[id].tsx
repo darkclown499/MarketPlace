@@ -18,20 +18,12 @@ import { useFavoriteIds } from '@/hooks/useFavorites';
 import { Spacing, FontSize, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { useLanguage } from '@/hooks/useLanguage';
+import { timeAgoLong } from '@/utils/timeAgo';
 
 const { width } = Dimensions.get('window');
 
 function formatPrice(price: number) {
   return price === 0 ? 'Free' : `₪${price.toLocaleString()}`;
-}
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 30) return `${days} days ago`;
-  return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 const REPORT_REASONS = [
@@ -389,8 +381,6 @@ function AdDetailScrollContent({
   onPromote, onReport, router, user, showAlert,
   relatedAds, favIds, toggleFav, sellerVerified,
 }: any) {
-  const { width: W } = Dimensions.get('window');
-
   return (
     <View>
       {/* Image carousel */}
@@ -404,7 +394,7 @@ function AdDetailScrollContent({
                   onPress={() => openGallery(idx)}
                   style={[{ display: idx === activeImage ? 'flex' : 'none' }]}
                 >
-                  <Image source={{ uri: img.url }} style={[styles.carouselImg, { width: W }]} contentFit="cover" transition={200} />
+                  <Image source={{ uri: img.url }} style={[styles.carouselImg, { width: width }]} contentFit="cover" transition={200} />
                 </Pressable>
               ))}
             </View>
@@ -513,7 +503,7 @@ function AdDetailScrollContent({
           <View style={styles.metaRow}>
             {[
               { icon: 'location-on', text: ad.location || 'No location', color: colors.primary },
-              { icon: 'access-time', text: timeAgo(ad.created_at), color: colors.textMuted },
+              { icon: 'access-time', text: timeAgoLong(ad.created_at), color: colors.textMuted },
               { icon: 'visibility', text: `${ad.views} ${t.views}`, color: colors.textMuted },
             ].map((m, i) => (
               <View key={i} style={[styles.metaChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>

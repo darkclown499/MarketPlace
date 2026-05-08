@@ -8,6 +8,7 @@ import { Radius, FontSize, Spacing, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { useLanguage } from '@/hooks/useLanguage';
 import { getCategoryName } from '@/services/categoriesService';
+import { timeAgo } from '@/utils/timeAgo';
 
 interface AdCardProps {
   ad: Ad;
@@ -20,16 +21,6 @@ interface AdCardProps {
 function formatPrice(price: number, isAr: boolean) {
   if (price === 0) return isAr ? 'مجاني' : 'Free';
   return `₪${price.toLocaleString()}`;
-}
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'now';
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  return `${Math.floor(hrs / 24)}d`;
 }
 
 export const AdCard = memo(function AdCard({ ad, width, sponsored, isFavorited = false, onFavoritePress }: AdCardProps) {

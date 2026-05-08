@@ -5,23 +5,12 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Conversation } from '@/services/chatService';
 import { Radius, FontSize, Spacing, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
+import { timeAgo } from '@/utils/timeAgo';
 
 interface MessagePreviewProps {
   conversation: Conversation;
   currentUserId: string;
   onPress: (id: string) => void;
-}
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'now';
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d`;
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 const AVATAR_COLORS = ['#0A6E5C', '#3B82F6', '#8B5CF6', '#EC4899', '#F97316', '#10B981'];
