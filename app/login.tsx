@@ -41,8 +41,20 @@ export default function LoginScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const router = useRouter();
   const isSubmittingRef = useRef(false);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Countdown timer for resend button
+  React.useEffect(() => {
+    if (resendCooldown <= 0) {
+      if (cooldownRef.current) { clearInterval(cooldownRef.current); cooldownRef.current = null; }
+      return;
+    }
+    cooldownRef.current = setInterval(() => setResendCooldown(v => v <= 1 ? 0 : v - 1), 1000);
+    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
+  }, [resendCooldown > 0]);
 
   const togglePassword = useCallback(() => setShowPassword(v => !v), []);
   const toggleConfirmPassword = useCallback(() => setShowConfirmPassword(v => !v), []);
@@ -53,8 +65,9 @@ export default function LoginScreen() {
     if (operationLoading || verifying || isSubmittingRef.current) return;
     isSubmittingRef.current = true;
     try {
-      const { error } = await signInWithPassword(email.trim().toLowerCase(), password);
-      if (error) showAlert(t.loginFailed, error);
+      const { error, user: loggedInUser } = await signInWithPassword(email.trim().toLowerCase(), password);
+      if (error) { showAlert(t.loginFailed, error); return; }
+      if (loggedInUser) router.replace('/(tabs)');
     } finally {
       isSubmittingRef.current = false;
     }
@@ -71,6 +84,21 @@ export default function LoginScreen() {
       const { error } = await sendOTP(email.trim().toLowerCase());
       if (error) return showAlert('Error', error);
       setMode('otp');
+      setResendCooldown(60);
+    } finally {
+      isSubmittingRef.current = false;
+    }
+  };
+
+  // ── Resend OTP ──
+  const handleResendOTP = async () => {
+    if (resendCooldown > 0 || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    try {
+      const { error } = await sendOTP(email.trim().toLowerCase());
+      if (error) return showAlert('Error', error);
+      setResendCooldown(60);
+      showAlert(isAr ? 'تم الإرسال' : 'Code Sent', isAr ? 'تم إرسال رمز جديد إلى بريدك الإلكتروني' : 'A new verification code was sent to your email.');
     } finally {
       isSubmittingRef.current = false;
     }
@@ -264,6 +292,18 @@ export default function LoginScreen() {
               </View>
               <Input label={t.verificationCode} placeholder="0  0  0  0" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={4} textAlign="center" returnKeyType="done" onSubmitEditing={handleVerifyOTP} />
               <Button label={t.verifyCreate} onPress={handleVerifyOTP} loading={operationLoading} size="lg" />
+              <Pressable
+                style={[styles.resendBtn, { opacity: resendCooldown > 0 ? 0.5 : 1 }]}
+                onPress={handleResendOTP}
+                disabled={resendCooldown > 0}
+              >
+                <MaterialIcons name="refresh" size={15} color={resendCooldown > 0 ? colors.textMuted : colors.primary} />
+                <Text style={[styles.resendText, { color: resendCooldown > 0 ? colors.textMuted : colors.primary }]}>
+                  {resendCooldown > 0
+                    ? (isAr ? `إعادة الإرسال (${resendCooldown}ث)` : `Resend Code (${resendCooldown}s)`)
+                    : (isAr ? 'إعادة إرسال الرمز' : 'Resend Code')}
+                </Text>
+              </Pressable>
               <Pressable style={styles.link} onPress={() => setMode('register')}>
                 <Text style={[styles.linkText, { color: colors.primary }]}>{t.backToRegistration}</Text>
               </Pressable>
@@ -350,7 +390,9 @@ const styles = StyleSheet.create({
   otpTitle: { fontSize: FontSize.xl, fontWeight: '800', letterSpacing: -0.3 },
   otpSub: { fontSize: FontSize.sm },
   otpEmail: { fontSize: FontSize.md, fontWeight: '600' },
-  link: { alignItems: 'center', marginTop: Spacing.md },
+  resendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: Spacing.md, paddingVertical: 10 },
+  resendText: { fontSize: FontSize.sm, fontWeight: '600' },
+  link: { alignItems: 'center', marginTop: Spacing.xs },
   linkText: { fontSize: FontSize.sm, fontWeight: '600' },
   footerHint: { textAlign: 'center', fontSize: FontSize.sm, color: 'rgba(255,255,255,0.4)', marginTop: Spacing.md },
   footerLink: { color: 'rgba(255,255,255,0.9)', fontWeight: '700' },
