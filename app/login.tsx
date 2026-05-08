@@ -82,8 +82,12 @@ export default function LoginScreen() {
     if (verifying) return;
     setVerifying(true);
     try {
-      const { error } = await verifyOTPAndLogin(email.trim(), otp.trim(), { password });
-      if (error) showAlert(t.verificationFailed, error);
+      const { error, user: newUser } = await verifyOTPAndLogin(email.trim(), otp.trim(), { password });
+      if (error) {
+        showAlert(t.verificationFailed, error);
+      } else if (newUser) {
+        router.replace('/(tabs)');
+      }
     } finally {
       setVerifying(false);
     }
