@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable,
 } from 'react-native';
@@ -46,7 +46,17 @@ export default function MessagesScreen() {
     );
   }
 
-  const totalConvs = conversations.length;
+  const handleConvPress = useCallback((id: string) => {
+    router.push(`/chat/${id}`);
+  }, [router]);
+
+  const renderConversation = useCallback(({ item }: any) => (
+    <MessagePreview
+      conversation={item}
+      currentUserId={user!.id}
+      onPress={handleConvPress}
+    />
+  ), [user, handleConvPress]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -85,13 +95,11 @@ export default function MessagesScreen() {
       <FlatList
         data={conversations}
         keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <MessagePreview
-            conversation={item}
-            currentUserId={user.id}
-            onPress={id => router.push(`/chat/${id}`)}
-          />
-        )}
+        renderItem={renderConversation}
+        windowSize={5}
+        maxToRenderPerBatch={15}
+        initialNumToRender={15}
+        removeClippedSubviews={true}
         ItemSeparatorComponent={() => (
           <View style={[styles.separator, { backgroundColor: colors.borderLight }]} />
         )}

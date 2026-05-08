@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
+import React, { useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { CategoryCard, EmptyState } from '@/components';
@@ -15,6 +15,17 @@ export default function CategoriesScreen() {
   const { colors } = useTheme();
   const { t, language } = useLanguage();
   const { categories, loading } = useCategories();
+
+  const handlePress = useCallback((cat: any) => {
+    const localizedName = getCategoryName(cat, language);
+    router.push(`/category/${cat.slug}?categoryId=${cat.id}&name=${encodeURIComponent(localizedName)}`);
+  }, [language, router]);
+
+  const renderItem = useCallback(({ item }: any) => (
+    <View style={styles.cardWrapper}>
+      <CategoryCard category={item} onPress={handlePress} />
+    </View>
+  ), [handlePress]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -32,19 +43,13 @@ export default function CategoriesScreen() {
         data={categories}
         keyExtractor={item => item.id}
         numColumns={2}
-        renderItem={({ item }) => (
-          <View style={styles.cardWrapper}>
-            <CategoryCard
-              category={item}
-              onPress={cat => {
-                const localizedName = getCategoryName(cat, language);
-                router.push(`/category/${cat.slug}?categoryId=${cat.id}&name=${encodeURIComponent(localizedName)}`);
-              }}
-            />
-          </View>
-        )}
+        renderItem={renderItem}
         contentContainerStyle={styles.grid}
         showsVerticalScrollIndicator={false}
+        windowSize={5}
+        maxToRenderPerBatch={12}
+        initialNumToRender={12}
+        removeClippedSubviews={true}
         ListEmptyComponent={
           !loading ? (
             <EmptyState icon="category" title={t.noCategories} subtitle={t.noCategoriesSub} />
