@@ -19,6 +19,7 @@ export default function MessagesScreen() {
   const { colors } = useTheme();
   const { t, isRTL, language } = useLanguage();
   const { conversations, loading, reload, unreadCount } = useConversations();
+  const totalConvs = conversations.length;
 
   const isAr = language === 'ar';
 
