@@ -193,25 +193,48 @@ export default function LoginScreen() {
         linkingResolved = true;
         linkingSubscription?.remove();
         linkingSubscription = null;
-        WebBrowser.dismissAuthSession();
-        setGoogleLoading(true);
-        await processCallbackUrl(cbUrl);
-        setGoogleLoading(false);
+        try { WebBrowser.dismissAuthSession(); } catch (_) {}
+        try {
+          await processCallbackUrl(cbUrl);
+        } catch (e: any) {
+          showAlert(isAr ? 'خطأ' : 'Error', e.message ?? 'Google sign-in failed');
+        } finally {
+          setGoogleLoading(false);
+        }
       });
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
       linkingSubscription?.remove();
       linkingSubscription = null;
-      if (!linkingResolved && result.type === 'success' && result.url) {
-        linkingResolved = true;
-        await processCallbackUrl(result.url);
+
+      if (!linkingResolved) {
+        if (result.type === 'success' && result.url) {
+          linkingResolved = true;
+          try {
+            await processCallbackUrl(result.url);
+          } catch (e: any) {
+            showAlert(isAr ? 'خطأ' : 'Error', e.message ?? 'Google sign-in failed');
+          } finally {
+            setGoogleLoading(false);
+          }
+        } else if (result.type === 'cancel' || result.type === 'dismiss') {
+          // User cancelled — just stop loading
+          setGoogleLoading(false);
+        } else {
+          // Check if session was set anyway (some Android flows)
+          const supabase = getSupabaseClient();
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            router.replace('/(tabs)');
+          }
+          setGoogleLoading(false);
+        }
       }
     } catch (e: any) {
       linkingSubscription?.remove();
       linkingSubscription = null;
       showAlert(isAr ? 'خطأ' : 'Error', e.message ?? 'Google sign-in failed');
-    } finally {
-      if (!linkingResolved) setGoogleLoading(false);
+      setGoogleLoading(false);
     }
   };
 

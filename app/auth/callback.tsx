@@ -98,7 +98,13 @@ export default function AuthCallbackScreen() {
       else showError(errMsg);
     };
 
-    // ── 1. Listen for auth state change (fires as soon as Supabase sets session) ──
+    // ── 0. Immediately check if session already exists (Google may have
+    //       set it before this screen mounted via onAuthStateChange) ──────
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) resolve(true);
+    });
+
+    // ── 1. Listen for auth state change ──────────────────────────────────
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
         resolve(true);

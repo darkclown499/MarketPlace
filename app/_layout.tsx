@@ -41,46 +41,47 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
 
 export default function RootLayout() {
   useEffect(() => {
-    // ── Defer all non-critical startup work until after interactions settle ──
-    // This prevents heavy async tasks from competing with the initial render.
+    // ── CRITICAL: Register auth state listener immediately ──────────────────
+    // Must NOT be deferred — Google OAuth fires SIGNED_IN before interactions
+    // settle and the listener must be ready to catch it.
+    import('@/template').then(({ getSupabaseClient }) => {
+      const supabase = getSupabaseClient();
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_OUT') {
+          import('expo-router').then(({ router }) => {
+            router.replace('/login');
+          });
+        }
+      });
+      // Note: subscription cleanup handled by app lifecycle
+    });
+
+    // Web console interceptor for stale token errors (immediate)
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const originalConsoleError = console.error.bind(console);
+      console.error = (...args: any[]) => {
+        const msg = args[0]?.message ?? String(args[0] ?? '');
+        if (msg.includes('Refresh Token Not Found') || msg.includes('Invalid Refresh Token')) {
+          try {
+            const keys: string[] = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && k.includes('supabase')) keys.push(k);
+            }
+            keys.forEach(k => localStorage.removeItem(k));
+          } catch (_) {}
+          return;
+        }
+        originalConsoleError(...args);
+      };
+    }
+
+    // ── Defer only heavy non-critical tasks ─────────────────────────────────
     const task = InteractionManager.runAfterInteractions(() => {
-      // Push notification setup — heavy, deferred
+      // Push notification setup — heavy, safe to defer
       import('@/hooks/useChat').then(({ requestNotificationPermissions }) => {
         requestNotificationPermissions();
       });
-
-      // Auth state listener — deferred, not needed before first frame
-      import('@/template').then(({ getSupabaseClient }) => {
-        const supabase = getSupabaseClient();
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-          if (event === 'SIGNED_OUT') {
-            import('expo-router').then(({ router }) => {
-              router.replace('/login');
-            });
-          }
-        });
-        // Note: subscription cleanup handled by app lifecycle
-      });
-
-      // Web console interceptor for stale token errors
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        const originalConsoleError = console.error.bind(console);
-        console.error = (...args: any[]) => {
-          const msg = args[0]?.message ?? String(args[0] ?? '');
-          if (msg.includes('Refresh Token Not Found') || msg.includes('Invalid Refresh Token')) {
-            try {
-              const keys: string[] = [];
-              for (let i = 0; i < localStorage.length; i++) {
-                const k = localStorage.key(i);
-                if (k && k.includes('supabase')) keys.push(k);
-              }
-              keys.forEach(k => localStorage.removeItem(k));
-            } catch (_) {}
-            return;
-          }
-          originalConsoleError(...args);
-        };
-      }
     });
 
     return () => task.cancel();
