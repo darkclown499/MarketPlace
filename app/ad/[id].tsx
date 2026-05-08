@@ -408,7 +408,7 @@ function AdDetailScrollContent({
             </View>
             {/* Swipe handler overlay */}
             <View
-              style={[styles.carouselOverlay, { width: W }]}
+              style={[styles.carouselOverlay, { width: width }]}
               onStartShouldSetResponder={() => true}
             />
             {/* Tap to zoom hint */}
