@@ -17,7 +17,9 @@ jobs:
         run: npm install -g eas-cli
 
       - name: Install deps
-        run: npm install --legacy-peer-deps
+        run: |
+          npm install --legacy-peer-deps
+          npm install ajv@^8 --save-dev --legacy-peer-deps
 
       - name: Build APK
         run: eas build -p android --profile preview --non-interactive
