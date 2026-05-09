@@ -8,6 +8,7 @@
     "scheme": "onspaceapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "owner": "eyadfadezh499s-organization",
     "ios": {
       "supportsTablet": true
     },
@@ -72,6 +73,11 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "souqqalqilia"
+      }
     }
   }
 }
