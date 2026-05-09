@@ -1,3 +1,10 @@
+// Polyfill maybeCompleteAuthSession — removed in newer expo-web-browser versions
+// but still called by the template/auth/supabase/service.ts at module load time.
+import * as WebBrowser from 'expo-web-browser';
+if (typeof (WebBrowser as any).maybeCompleteAuthSession !== 'function') {
+  (WebBrowser as any).maybeCompleteAuthSession = () => ({ type: 'success' });
+}
+
 import { AlertProvider, AuthProvider } from '@/template';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
