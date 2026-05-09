@@ -2,6 +2,15 @@ name: Build Android
 
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Build profile (preview = APK, production = AAB)'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - preview
+          - production
 
 jobs:
   build:
@@ -19,15 +28,47 @@ jobs:
       - name: Install dependencies
         run: |
           npm install --legacy-peer-deps --force
-          npm install ajv@^8 --legacy-peer-deps --force
+          npm install ajv@^8 expo-build-properties --legacy-peer-deps --force
 
       - name: Initialize EAS project (Non-interactive)
-        # هذا الأمر مهم جداً لربط المشروع
         run: eas init --id ${{ secrets.EXPO_PROJECT_ID }} --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Build APK
-        run: eas build -p android --profile preview --non-interactive
+      - name: Set EAS Secrets (Supabase env vars)
+        run: |
+          # Push secrets to EAS so the build can access them
+          echo "${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}" | eas secret:create \
+            --scope project \
+            --name EXPO_PUBLIC_SUPABASE_URL \
+            --type string \
+            --force \
+            --non-interactive || true
+          echo "${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}" | eas secret:create \
+            --scope project \
+            --name EXPO_PUBLIC_SUPABASE_ANON_KEY \
+            --type string \
+            --force \
+            --non-interactive || true
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build Android (${{ github.event.inputs.profile }})
+        run: eas build -p android --profile ${{ github.event.inputs.profile }} --non-interactive --wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Print artifact URL
+        run: |
+          echo "✅ Build complete. Download the artifact from:"
+          eas build:list --platform android --limit 1 --json | python3 -c "
+          import sys, json
+          builds = json.load(sys.stdin)
+          if builds:
+            b = builds[0]
+            print(f'  Profile : {b.get(\"buildProfile\", \"unknown\")}')
+            print(f'  Status  : {b.get(\"status\", \"unknown\")}')
+            print(f'  URL     : {b.get(\"artifacts\", {}).get(\"buildUrl\") or b.get(\"expirationDate\", \"See EAS dashboard\")}')
+          " 2>/dev/null || echo "  → Visit https://expo.dev to download your build"
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

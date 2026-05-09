@@ -18,6 +18,7 @@
       },
       "edgeToEdgeEnabled": true,
       "minSdkVersion": 29,
+      "allowBackup": false,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.ACCESS_FINE_LOCATION",
@@ -35,7 +36,11 @@
         "android.permission.WRITE_CALENDAR",
         "android.permission.ACTIVITY_RECOGNITION",
         "android.permission.SYSTEM_ALERT_WINDOW",
-        "android.permission.READ_CONTACTS"
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.GET_ACCOUNTS",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ],
       "intentFilters": [
         {
@@ -49,6 +54,18 @@
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "dmyjmmpytwppyfsjdmyj.backend.onspace.ai",
+              "pathPrefix": "/auth/v1/callback"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ]
     },
@@ -59,6 +76,18 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/withProductionManifest",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": false,
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0"
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {
