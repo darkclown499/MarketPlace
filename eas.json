@@ -15,10 +15,6 @@
         "simulator": true
       },
       "env": {
-      "ios": {
-        "simulator": true
-      },
-      "env": {
         "APP_VARIANT": "development",
         "EXPO_PUBLIC_SUPABASE_URL": "$EXPO_PUBLIC_SUPABASE_URL",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
