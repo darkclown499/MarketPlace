@@ -368,6 +368,21 @@ export default function ProfileScreen() {
               <MaterialIcons name={isRTL ? 'chevron-left' : 'chevron-right'} size={20} color={colors.textMuted} />
             </Pressable>
 
+            {/* Privacy Policy */}
+            <Pressable
+              style={[styles.settingRowPressable, { borderBottomColor: colors.borderLight, flexDirection: isRTL ? 'row-reverse' : 'row' }]}
+              onPress={() => router.push('/privacy')}
+            >
+              <View style={[styles.settingIconWrap, { backgroundColor: colors.primaryGhost }]}>
+                <MaterialIcons name="privacy-tip" size={20} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingLabel, { color: colors.textPrimary, textAlign: isRTL ? 'right' : 'left' }]}>{t.privacyPolicy}</Text>
+                <Text style={[styles.settingSub, { color: colors.textMuted, textAlign: isRTL ? 'right' : 'left' }]}>{t.privacyPolicySub}</Text>
+              </View>
+              <MaterialIcons name={isRTL ? 'chevron-left' : 'chevron-right'} size={20} color={colors.textMuted} />
+            </Pressable>
+
             {/* Logout */}
             <Pressable
               style={[styles.settingRowPressable, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}

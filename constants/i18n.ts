@@ -292,6 +292,10 @@ export const translations = {
     // Unread messages
     unreadMessages: 'unread messages',
 
+    // Legal
+    privacyPolicy: 'Privacy Policy',
+    privacyPolicySub: 'How we handle your data',
+
     // Boost
     boost: 'Boost',
     boostAd: 'Boost Listing',
@@ -591,6 +595,10 @@ export const translations = {
 
     // Unread messages
     unreadMessages: 'رسائل غير مقروءة',
+
+    // Legal
+    privacyPolicy: 'سياسة الخصوصية',
+    privacyPolicySub: 'كيف نتعامل مع بياناتك',
 
     // Boost
     boost: 'تعزيز',
