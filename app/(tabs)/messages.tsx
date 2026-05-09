@@ -23,6 +23,19 @@ export default function MessagesScreen() {
 
   const isAr = language === 'ar';
 
+  // ── Hooks must be called unconditionally (Rules of Hooks) ──────────────────
+  const handleConvPress = useCallback((id: string) => {
+    router.push(`/chat/${id}`);
+  }, [router]);
+
+  const renderConversation = useCallback(({ item }: any) => (
+    <MessagePreview
+      conversation={item}
+      currentUserId={user!.id}
+      onPress={handleConvPress}
+    />
+  ), [user, handleConvPress]);
+
   if (!user) {
     return (
       <View style={[styles.guest, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -46,18 +59,6 @@ export default function MessagesScreen() {
       </View>
     );
   }
-
-  const handleConvPress = useCallback((id: string) => {
-    router.push(`/chat/${id}`);
-  }, [router]);
-
-  const renderConversation = useCallback(({ item }: any) => (
-    <MessagePreview
-      conversation={item}
-      currentUserId={user!.id}
-      onPress={handleConvPress}
-    />
-  ), [user, handleConvPress]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
