@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { Button, Input } from '@/components';
 import { Spacing, FontSize, Radius, Shadow } from '@/constants/theme';
@@ -123,117 +122,142 @@ export default function LoginScreen() {
 
   // ── Google Sign-In ──
   const handleGoogleSignIn = async () => {
+    if (googleLoading) return;
     setGoogleLoading(true);
-    let linkingSubscription: ReturnType<typeof Linking.addEventListener> | null = null;
-    let linkingResolved = false;
 
     try {
       const supabase = getSupabaseClient();
 
+      // ── WEB ──────────────────────────────────────────────────────────────
       if (Platform.OS === 'web') {
-        const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : '';
+        const redirectTo = typeof window !== 'undefined'
+          ? `${window.location.origin}/auth/callback`
+          : '';
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
-          options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account', access_type: 'offline' } },
+          options: {
+            redirectTo,
+            skipBrowserRedirect: false,
+            queryParams: { prompt: 'select_account', access_type: 'offline' },
+          },
         });
         if (error || !data?.url) {
           showAlert(isAr ? 'خطأ' : 'Error', error?.message ?? 'Failed to start Google sign-in');
           setGoogleLoading(false);
-          return;
         }
-        try { await Linking.openURL(data.url); } catch { try { window.location.href = data.url; } catch (_) {} }
+        // Browser will redirect — no further action needed
         return;
       }
 
-      // ── MOBILE ──
+      // ── MOBILE ───────────────────────────────────────────────────────────
+      // Use the app scheme registered in app.json
       const redirectTo = 'onspaceapp://auth/callback';
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account', access_type: 'offline' } },
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+          queryParams: { prompt: 'select_account', access_type: 'offline' },
+        },
       });
+
       if (error || !data?.url) {
-        showAlert(isAr ? 'خطأ' : 'Error', error?.message ?? 'Failed to start Google sign-in');
+        showAlert(isAr ? 'خطأ' : 'Error', error?.message ?? 'Failed to get OAuth URL');
         setGoogleLoading(false);
         return;
       }
 
-      const processCallbackUrl = async (callbackUrl: string) => {
-        let params: URLSearchParams;
-        try {
-          const parsed = new URL(callbackUrl);
-          params = new URLSearchParams(parsed.searchParams);
-          if (parsed.hash?.startsWith('#')) new URLSearchParams(parsed.hash.slice(1)).forEach((v, k) => params.set(k, v));
-        } catch {
-          showAlert(isAr ? 'خطأ' : 'Error', isAr ? 'رابط غير صالح' : 'Invalid callback URL');
-          return;
-        }
-        const oauthErr = params.get('error_description') ?? params.get('error');
-        if (oauthErr) { showAlert(isAr ? 'خطأ' : 'Error', oauthErr); return; }
-
-        const code = params.get('code');
-        if (code) {
-          const { error: exchangeError } = await getSupabaseClient().auth.exchangeCodeForSession(code);
-          if (exchangeError) { showAlert(isAr ? 'خطأ' : 'Error', exchangeError.message); return; }
-          router.replace('/(tabs)');
-          return;
-        }
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        if (accessToken && refreshToken) {
-          const { error: sessionError } = await getSupabaseClient().auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-          if (sessionError) { showAlert(isAr ? 'خطأ' : 'Error', sessionError.message); return; }
-          router.replace('/(tabs)');
-          return;
-        }
-        showAlert(isAr ? 'خطأ' : 'Error', isAr ? 'لم يتم استلام بيانات الجلسة' : 'No session data received');
-      };
-
-      linkingSubscription = Linking.addEventListener('url', async ({ url: cbUrl }) => {
-        if (!cbUrl.startsWith('onspaceapp://') || linkingResolved) return;
-        linkingResolved = true;
-        linkingSubscription?.remove();
-        linkingSubscription = null;
-        try { WebBrowser.dismissAuthSession(); } catch (_) {}
-        try {
-          await processCallbackUrl(cbUrl);
-        } catch (e: any) {
-          showAlert(isAr ? 'خطأ' : 'Error', e.message ?? 'Google sign-in failed');
-        } finally {
-          setGoogleLoading(false);
-        }
+      // Open the browser and wait — openAuthSessionAsync captures the redirect
+      // automatically when it matches the redirectUrl prefix.
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo, {
+        showInRecents: true,
       });
 
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-      linkingSubscription?.remove();
-      linkingSubscription = null;
-
-      if (!linkingResolved) {
-        if (result.type === 'success' && result.url) {
-          linkingResolved = true;
-          try {
-            await processCallbackUrl(result.url);
-          } catch (e: any) {
-            showAlert(isAr ? 'خطأ' : 'Error', e.message ?? 'Google sign-in failed');
-          } finally {
-            setGoogleLoading(false);
-          }
-        } else if (result.type === 'cancel' || result.type === 'dismiss') {
-          // User cancelled — just stop loading
-          setGoogleLoading(false);
-        } else {
-          // Check if session was set anyway (some Android flows)
-          const supabase = getSupabaseClient();
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            router.replace('/(tabs)');
-          }
-          setGoogleLoading(false);
-        }
+      if (result.type === 'cancel' || result.type === 'dismiss') {
+        // User closed the browser without signing in
+        setGoogleLoading(false);
+        return;
       }
+
+      if (result.type === 'success' && result.url) {
+        await processOAuthCallback(result.url, supabase);
+        return;
+      }
+
+      // Fallback: browser closed without result — check if session was set
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.replace('/(tabs)');
+      } else {
+        showAlert(isAr ? 'خطأ' : 'Sign-in Failed', isAr ? 'لم يتم تسجيل الدخول. حاول مجدداً.' : 'Sign-in was not completed. Please try again.');
+      }
+      setGoogleLoading(false);
+
     } catch (e: any) {
-      linkingSubscription?.remove();
-      linkingSubscription = null;
       showAlert(isAr ? 'خطأ' : 'Error', e.message ?? 'Google sign-in failed');
+      setGoogleLoading(false);
+    }
+  };
+
+  // Parses the OAuth callback URL and establishes a Supabase session
+  const processOAuthCallback = async (callbackUrl: string, supabase: ReturnType<typeof getSupabaseClient>) => {
+    try {
+      const parsed = new URL(callbackUrl);
+      const params = new URLSearchParams(parsed.searchParams);
+      // Also parse hash fragment (implicit flow)
+      if (parsed.hash?.startsWith('#')) {
+        new URLSearchParams(parsed.hash.slice(1)).forEach((v, k) => params.set(k, v));
+      }
+
+      const oauthErr = params.get('error_description') ?? params.get('error');
+      if (oauthErr) {
+        showAlert(isAr ? 'خطأ' : 'Error', decodeURIComponent(oauthErr));
+        setGoogleLoading(false);
+        return;
+      }
+
+      // PKCE flow: exchange code for session
+      const code = params.get('code');
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) {
+          // Code may have already been used — check existing session
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) { router.replace('/(tabs)'); return; }
+          showAlert(isAr ? 'خطأ' : 'Error', error.message);
+          setGoogleLoading(false);
+          return;
+        }
+        router.replace('/(tabs)');
+        return;
+      }
+
+      // Implicit flow: set session directly from tokens
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+      if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+        if (error) {
+          showAlert(isAr ? 'خطأ' : 'Error', error.message);
+          setGoogleLoading(false);
+          return;
+        }
+        router.replace('/(tabs)');
+        return;
+      }
+
+      // Last resort: check if session exists
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.replace('/(tabs)');
+        return;
+      }
+
+      showAlert(isAr ? 'خطأ' : 'Sign-in Failed', isAr ? 'لم يتم استلام بيانات الجلسة.' : 'No session data received.');
+      setGoogleLoading(false);
+    } catch (e: any) {
+      showAlert(isAr ? 'خطأ' : 'Error', e.message ?? 'Failed to process sign-in');
       setGoogleLoading(false);
     }
   };
