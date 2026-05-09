@@ -1,14 +1,25 @@
 /**
  * Expo config plugin — enforces production-safe AndroidManifest.xml flags.
  *
- * Fixes applied:
+ * Fixes applied (MobSF audit):
  *   1. android:allowBackup="false"        — blocks ADB data extraction
  *   2. android:usesCleartextTraffic="false" — forces HTTPS only
  *   3. android:debuggable="false"          — prevents debugger attachment in release
  *   4. android:networkSecurityConfig       — references res/xml/network_security_config.xml
  *   5. Stripe / CropImage exported activities protected with permission
- *   6. Removes any accidental exported receiver/service without permission
+ *   6. Removes any exported receiver/service without a permission guard
+ *   7. Anti-VM/Anti-Debug code clarification: these originate from React Native's
+ *      native binary (hermes/JSC) and CANNOT be removed from JS layer. They are
+ *      false positives that MobSF flags in third-party native code, not our app code.
+ *      Google Play accepts these since they are part of the standard RN framework.
  */
+
+// NOTE ON SIGNING:
+// SHA-256 release signing is handled 100% by EAS Build when using
+// credentialsSource: "remote" in eas.json production profile.
+// EAS generates a keystore with RSA-2048 + SHA-256 and v1/v2/v3 signatures.
+// The debug keystore (SHA1) is ONLY used in development builds — never production.
+// minSdk is set to 29 in app.json (Android 10), satisfying MobSF recommendation.
 const { withAndroidManifest, withDangerousMod } = require('@expo/config-plugins');
 const path = require('path');
 const fs = require('fs');

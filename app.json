@@ -18,6 +18,8 @@
       },
       "edgeToEdgeEnabled": true,
       "minSdkVersion": 29,
+      "targetSdkVersion": 35,
+      "compileSdkVersion": 35,
       "allowBackup": false,
       "permissions": [
         "android.permission.CAMERA",
