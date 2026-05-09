@@ -16,14 +16,18 @@ jobs:
       - name: Install EAS CLI
         run: npm install -g eas-cli@latest
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           npm install --legacy-peer-deps --force
           npm install ajv@^8 --legacy-peer-deps --force
+
+      - name: Initialize EAS project (Non-interactive)
+        # هذا الأمر مهم جداً لربط المشروع
+        run: eas init --id ${{ secrets.EXPO_PROJECT_ID }} --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
       - name: Build APK
         run: eas build -p android --profile preview --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_PROJECT_ID: souqqalqilia
-          EXPO_ACCOUNT_NAME: eyadfadezh499s-organization
