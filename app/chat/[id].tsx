@@ -249,8 +249,17 @@ export default function ChatScreen() {
 
   const isBuyer = conversation?.buyer_id === user?.id;
   const isSeller = conversation?.seller_id === user?.id;
-  const adStatus = conversation?.ads?.status;
+  const adStatus = (conversation as any)?.ads?.status as string | undefined;
   const adId = conversation?.ad_id;
+
+  // Guard: if id is missing, show error state
+  if (!id) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <Text>Conversation not found.</Text>
+      </View>
+    );
+  }
 
   // ── Mark as Sold / Cancel Sale ──────────────────────────────────────────
   const handleMarkSold = async () => {
