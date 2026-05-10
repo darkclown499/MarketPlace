@@ -36,7 +36,7 @@ export async function pickImage(source: 'camera' | 'gallery' = 'gallery'): Promi
   if (status !== 'granted') return null;
 
   const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images'],
+    mediaTypes: ['images'],     // images only — never video; avoids READ_MEDIA_VIDEO
     quality: 1,
     base64: false,
     allowsEditing: true,
@@ -54,15 +54,10 @@ export async function pickImage(source: 'camera' | 'gallery' = 'gallery'): Promi
     );
     return { uri: manipulated.uri, base64: manipulated.base64 ?? '' };
   } catch {
-    const fallback = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.75,
-      base64: true,
-      allowsEditing: true,
-      aspect: [4, 3],
-    });
-    if (fallback.canceled || !fallback.assets[0]) return null;
-    return { uri: fallback.assets[0].uri, base64: fallback.assets[0].base64 ?? '' };
+    // Fallback: return the raw asset URI — no second picker call to avoid
+    // triggering a second READ_MEDIA_IMAGES permission request on Android
+    if (!asset.uri) return null;
+    return { uri: asset.uri, base64: '' };
   }
 }
 

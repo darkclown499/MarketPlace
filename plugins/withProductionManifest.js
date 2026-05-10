@@ -140,39 +140,65 @@ const withSecureManifest = (config) => {
 // ─── Step 3: Strip dangerous/undeclared <uses-permission> tags ───────────────
 // Belt-and-suspenders: even if a dependency injects these at merge time,
 // remove them so Google Play never sees them.
-const FORBIDDEN_PERMISSIONS = [
+const FORBIDDEN_PERMISSIONS = new Set([
+  // ── Media (undeclared by app; injected by dependencies) ──────────────────
   'android.permission.READ_MEDIA_VIDEO',
+  'android.permission.READ_MEDIA_AUDIO',
+  'android.permission.READ_EXTERNAL_STORAGE',
+  'android.permission.WRITE_EXTERNAL_STORAGE',
+  'android.permission.MANAGE_EXTERNAL_STORAGE',
+
+  // ── Foreground Service types (Google Play policy violation) ───────────────
+  'android.permission.FOREGROUND_SERVICE',
   'android.permission.FOREGROUND_SERVICE_CAMERA',
   'android.permission.FOREGROUND_SERVICE_MICROPHONE',
   'android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION',
   'android.permission.FOREGROUND_SERVICE_LOCATION',
-  'android.permission.RECORD_AUDIO',
+  'android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE',
+  'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
+  'android.permission.FOREGROUND_SERVICE_HEALTH',
+  'android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING',
+  'android.permission.FOREGROUND_SERVICE_SPECIAL_USE',
+
+  // ── Location ──────────────────────────────────────────────────────────────
   'android.permission.ACCESS_FINE_LOCATION',
   'android.permission.ACCESS_COARSE_LOCATION',
-  'android.permission.SYSTEM_ALERT_WINDOW',
+  'android.permission.ACCESS_BACKGROUND_LOCATION',
+
+  // ── Sensors / Activity ────────────────────────────────────────────────────
   'android.permission.ACTIVITY_RECOGNITION',
-  'android.permission.READ_EXTERNAL_STORAGE',
-  'android.permission.READ_MEDIA_AUDIO',
-  'android.permission.FOREGROUND_SERVICE',
-  'android.permission.GET_ACCOUNTS',
-  'android.permission.USE_BIOMETRIC',
-  'android.permission.USE_FINGERPRINT',
+  'android.permission.RECORD_AUDIO',
+
+  // ── Overlay / System ──────────────────────────────────────────────────────
+  'android.permission.SYSTEM_ALERT_WINDOW',
+
+  // ── Contacts / Calendar / Telephony ──────────────────────────────────────
   'android.permission.READ_CONTACTS',
   'android.permission.WRITE_CONTACTS',
+  'android.permission.GET_ACCOUNTS',
   'android.permission.READ_CALENDAR',
   'android.permission.WRITE_CALENDAR',
-];
+  'android.permission.READ_PHONE_STATE',
+  'android.permission.PROCESS_OUTGOING_CALLS',
+  'android.permission.SEND_SMS',
+  'android.permission.RECEIVE_SMS',
+  'android.permission.READ_SMS',
+
+  // ── Biometrics ────────────────────────────────────────────────────────────
+  'android.permission.USE_BIOMETRIC',
+  'android.permission.USE_FINGERPRINT',
+]);
 
 const withStripForbiddenPermissions = (config) => {
   return withAndroidManifest(config, (config) => {
     const manifest = config.modResults.manifest;
     const before = (manifest['uses-permission'] || []).length;
     manifest['uses-permission'] = (manifest['uses-permission'] || []).filter(
-      (perm) => !FORBIDDEN_PERMISSIONS.includes(perm.$?.['android:name'] ?? '')
+      (perm) => !FORBIDDEN_PERMISSIONS.has(perm.$?.['android:name'] ?? '')
     );
     // Also strip uses-permission-sdk-23 variants
     manifest['uses-permission-sdk-23'] = (manifest['uses-permission-sdk-23'] || []).filter(
-      (perm) => !FORBIDDEN_PERMISSIONS.includes(perm.$?.['android:name'] ?? '')
+      (perm) => !FORBIDDEN_PERMISSIONS.has(perm.$?.['android:name'] ?? '')
     );
     const after = (manifest['uses-permission'] || []).length;
     if (before !== after) {
