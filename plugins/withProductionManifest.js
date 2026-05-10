@@ -137,10 +137,56 @@ const withSecureManifest = (config) => {
   });
 };
 
-// ─── Compose both mods ───────────────────────────────────────────────────────
+// ─── Step 3: Strip dangerous/undeclared <uses-permission> tags ───────────────
+// Belt-and-suspenders: even if a dependency injects these at merge time,
+// remove them so Google Play never sees them.
+const FORBIDDEN_PERMISSIONS = [
+  'android.permission.READ_MEDIA_VIDEO',
+  'android.permission.FOREGROUND_SERVICE_CAMERA',
+  'android.permission.FOREGROUND_SERVICE_MICROPHONE',
+  'android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION',
+  'android.permission.FOREGROUND_SERVICE_LOCATION',
+  'android.permission.RECORD_AUDIO',
+  'android.permission.ACCESS_FINE_LOCATION',
+  'android.permission.ACCESS_COARSE_LOCATION',
+  'android.permission.SYSTEM_ALERT_WINDOW',
+  'android.permission.ACTIVITY_RECOGNITION',
+  'android.permission.READ_EXTERNAL_STORAGE',
+  'android.permission.READ_MEDIA_AUDIO',
+  'android.permission.FOREGROUND_SERVICE',
+  'android.permission.GET_ACCOUNTS',
+  'android.permission.USE_BIOMETRIC',
+  'android.permission.USE_FINGERPRINT',
+  'android.permission.READ_CONTACTS',
+  'android.permission.WRITE_CONTACTS',
+  'android.permission.READ_CALENDAR',
+  'android.permission.WRITE_CALENDAR',
+];
+
+const withStripForbiddenPermissions = (config) => {
+  return withAndroidManifest(config, (config) => {
+    const manifest = config.modResults.manifest;
+    const before = (manifest['uses-permission'] || []).length;
+    manifest['uses-permission'] = (manifest['uses-permission'] || []).filter(
+      (perm) => !FORBIDDEN_PERMISSIONS.includes(perm.$?.['android:name'] ?? '')
+    );
+    // Also strip uses-permission-sdk-23 variants
+    manifest['uses-permission-sdk-23'] = (manifest['uses-permission-sdk-23'] || []).filter(
+      (perm) => !FORBIDDEN_PERMISSIONS.includes(perm.$?.['android:name'] ?? '')
+    );
+    const after = (manifest['uses-permission'] || []).length;
+    if (before !== after) {
+      console.log(`[withProductionManifest] Stripped ${before - after} forbidden permission(s)`);
+    }
+    return config;
+  });
+};
+
+// ─── Compose all mods ────────────────────────────────────────────────────────
 const withProductionManifest = (config) => {
   config = withNetworkSecurityConfig(config);
   config = withSecureManifest(config);
+  config = withStripForbiddenPermissions(config);
   return config;
 };
 
