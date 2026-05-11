@@ -1,66 +1,32 @@
 {
   "cli": {
     "version": ">= 12.0.0",
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
       "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleDebug"
-      },
-      "ios": {
-        "simulator": true
-      },
-      "env": {
-        "APP_VARIANT": "development",
-        "EXPO_PUBLIC_SUPABASE_URL": "$EXPO_PUBLIC_SUPABASE_URL",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+        "buildType": "apk"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "ios": {
-        "simulator": false
-      },
-      "env": {
-        "APP_VARIANT": "preview",
-        "EXPO_PUBLIC_SUPABASE_URL": "$EXPO_PUBLIC_SUPABASE_URL",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
       }
     },
     "production": {
-      "autoIncrement": true,
+      "autoIncrement": false,
       "android": {
         "buildType": "app-bundle",
-        "credentialsSource": "remote",
         "gradleCommand": ":app:bundleRelease"
-      },
-      "ios": {
-        "credentialsSource": "remote"
       },
       "env": {
         "APP_VARIANT": "production",
-        "EXPO_PUBLIC_SUPABASE_URL": "$EXPO_PUBLIC_SUPABASE_URL",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
-      }
-    }
-  },
-  "submit": {
-    "production": {
-      "android": {
-        "track": "internal",
-        "releaseStatus": "draft"
-      },
-      "ios": {
-        "appleId": "",
-        "ascAppId": "",
-        "appleTeamId": ""
+        "EXPO_PUBLIC_SUPABASE_URL": "https://dmyjmmpytwppyfsjdmyj.backend.onspace.ai",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTc3NzY0Mjk3MCwiZXhwIjoyMDkzMDAyOTcwLCJpc3MiOiJvbnNwYWNlIiwicmVmIjoiZG15am1tcHl0d3BweWZzamRteWoifQ.l4aJNMHbKH2GVLz-xCmo9GxN9c-N-Kozv-tBXh_3rRU"
       }
     }
   }
