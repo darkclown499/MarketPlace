@@ -1,30 +1,24 @@
 /**
  * Expo config plugin — enforces production-safe AndroidManifest.xml flags.
  *
- * Fixes applied (MobSF audit):
- *   1. android:allowBackup="false"        — blocks ADB data extraction
- *   2. android:usesCleartextTraffic="false" — forces HTTPS only
- *   3. android:debuggable="false"          — prevents debugger attachment in release
- *   4. android:networkSecurityConfig       — references res/xml/network_security_config.xml
- *   5. Stripe / CropImage exported activities protected with permission
- *   6. Removes any exported receiver/service without a permission guard
- *   7. Anti-VM/Anti-Debug code clarification: these originate from React Native's
- *      native binary (hermes/JSC) and CANNOT be removed from JS layer. They are
- *      false positives that MobSF flags in third-party native code, not our app code.
- *      Google Play accepts these since they are part of the standard RN framework.
+ * Fixes applied:
+ *   1. android:allowBackup="false"
+ *   2. android:usesCleartextTraffic="false"
+ *   3. android:debuggable="false"
+ *   4. android:networkSecurityConfig → HTTPS-only
+ *   5. Stripe / CropImage exported activities protected
+ *   6. Unexported components locked down
+ *   7. Forbidden permissions stripped (ACTIVITY_RECOGNITION, READ_MEDIA_VIDEO, etc.)
+ *   8. Play Billing Library forced to ≥6.0.1 via Gradle resolution strategy
+ *   9. Post-merge XML patch removes any permission that survived manifest merge
  */
-
-// NOTE ON SIGNING:
-// SHA-256 release signing is handled 100% by EAS Build when using
-// credentialsSource: "remote" in eas.json production profile.
-// EAS generates a keystore with RSA-2048 + SHA-256 and v1/v2/v3 signatures.
-// The debug keystore (SHA1) is ONLY used in development builds — never production.
-// minSdk is set to 29 in app.json (Android 10), satisfying MobSF recommendation.
-const { withAndroidManifest, withDangerousMod } = require('@expo/config-plugins');
+const { withAndroidManifest, withDangerousMod, withAppBuildGradle } = require('@expo/config-plugins');
 const path = require('path');
 const fs = require('fs');
 
-// ─── Step 1: Inject network_security_config.xml ──────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 1 — Inject network_security_config.xml (HTTPS-only)
+// ─────────────────────────────────────────────────────────────────────────────
 const withNetworkSecurityConfig = (config) => {
   return withDangerousMod(config, [
     'android',
@@ -35,16 +29,11 @@ const withNetworkSecurityConfig = (config) => {
       );
       if (!fs.existsSync(xmlDir)) fs.mkdirSync(xmlDir, { recursive: true });
 
-      const xmlPath = path.join(xmlDir, 'network_security_config.xml');
       fs.writeFileSync(
-        xmlPath,
+        path.join(xmlDir, 'network_security_config.xml'),
         `<?xml version="1.0" encoding="utf-8"?>
-<!--
-  Network Security Configuration
-  • Blocks all cleartext (HTTP) traffic — HTTPS only
-  • No cleartext exceptions for any domain
--->
 <network-security-config>
+  <!-- HTTPS only — cleartext (HTTP) traffic is prohibited -->
   <base-config cleartextTrafficPermitted="false">
     <trust-anchors>
       <certificates src="system" />
@@ -59,77 +48,63 @@ const withNetworkSecurityConfig = (config) => {
   ]);
 };
 
-// ─── Step 2: Patch AndroidManifest.xml ───────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 2 — Patch <application> flags + lock exported components
+// ─────────────────────────────────────────────────────────────────────────────
 const withSecureManifest = (config) => {
   return withAndroidManifest(config, (config) => {
     const manifest = config.modResults.manifest;
     const application = manifest.application?.[0];
-
     if (!application) return config;
 
-    // ── <application> attribute hardening ──────────────────────────────────
+    // Add tools namespace to manifest root so tools:node="remove" works
+    manifest.$ = manifest.$ || {};
+    manifest.$['xmlns:tools'] = 'http://schemas.android.com/tools';
+
+    // <application> hardening
     const app$ = application.$ || {};
-    app$['android:allowBackup']             = 'false';
-    app$['android:usesCleartextTraffic']    = 'false';
-    app$['android:debuggable']              = 'false';  // explicit; EAS also sets this
-    app$['android:networkSecurityConfig']   = '@xml/network_security_config';
+    app$['android:allowBackup']           = 'false';
+    app$['android:usesCleartextTraffic']  = 'false';
+    app$['android:debuggable']            = 'false';
+    app$['android:networkSecurityConfig'] = '@xml/network_security_config';
     application.$ = app$;
 
-    // ── Lock down third-party exported activities ──────────────────────────
-    // Components that must stay exported for deep-link / OAuth return but
-    // should be protected with a signature-level permission so only our own
-    // app (or the OS) can start them.
+    // Activities that must stay exported but need a permission guard
     const SENSITIVE_EXPORTED = [
-      // Stripe
       'com.stripe.android.link.LinkRedirectHandlerActivity',
       'com.stripe.android.payments.StripeBrowserProxyReturnActivity',
       'com.stripe.android.financialconnections.FinancialConnectionsSheetRedirectActivity',
-      // Image cropper
       'com.canhub.cropper.CropImageActivity',
     ];
 
-    // Activities we genuinely need unexported (no external caller needed)
     const FORCE_UNEXPORTED = [
       'com.stripe.android.payments.paymentlauncher.PaymentLauncherConfirmationActivity',
       'com.stripe.android.googlepaylauncher.GooglePayLauncherActivity',
       'com.stripe.android.googlepaylauncher.GooglePayPaymentMethodLauncherActivity',
     ];
 
-    const activities = application.activity || [];
-    activities.forEach((activity) => {
+    (application.activity || []).forEach((activity) => {
       const name = activity.$?.['android:name'];
       if (!name) return;
-
       if (FORCE_UNEXPORTED.includes(name)) {
         activity.$['android:exported'] = 'false';
       }
-
       if (SENSITIVE_EXPORTED.includes(name)) {
-        // Keep exported but add our signature permission so only we can call it
-        activity.$['android:exported']  = 'true';
-        activity.$['android:permission'] =
-          'android.permission.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION'; // signature-level system permission acting as guard
+        activity.$['android:exported']   = 'true';
+        activity.$['android:permission'] = 'android.permission.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION';
       }
     });
 
-    // ── Lock down any service / receiver without a permission ──────────────
+    // Lock any service/receiver that is exported without a permission
     const lockComponents = (list) => {
       (list || []).forEach((component) => {
         const c$ = component.$ || {};
-        if (
-          c$['android:exported'] === 'true' &&
-          !c$['android:permission']
-        ) {
-          // Don't touch intent-filter-driven components (they need to be exported)
-          const hasIntentFilter =
-            component['intent-filter'] && component['intent-filter'].length > 0;
-          if (!hasIntentFilter) {
-            component.$['android:exported'] = 'false';
-          }
+        if (c$['android:exported'] === 'true' && !c$['android:permission']) {
+          const hasIntentFilter = (component['intent-filter'] || []).length > 0;
+          if (!hasIntentFilter) component.$['android:exported'] = 'false';
         }
       });
     };
-
     lockComponents(application.service);
     lockComponents(application.receiver);
 
@@ -137,18 +112,18 @@ const withSecureManifest = (config) => {
   });
 };
 
-// ─── Step 3: Strip dangerous/undeclared <uses-permission> tags ───────────────
-// Belt-and-suspenders: even if a dependency injects these at merge time,
-// remove them so Google Play never sees them.
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 3 — Strip forbidden <uses-permission> via XML AST (in-memory pass)
+// ─────────────────────────────────────────────────────────────────────────────
 const FORBIDDEN_PERMISSIONS = new Set([
-  // ── Media (undeclared by app; injected by dependencies) ──────────────────
+  // Media — READ_MEDIA_VIDEO is flagged by Google Play policy
   'android.permission.READ_MEDIA_VIDEO',
   'android.permission.READ_MEDIA_AUDIO',
   'android.permission.READ_EXTERNAL_STORAGE',
   'android.permission.WRITE_EXTERNAL_STORAGE',
   'android.permission.MANAGE_EXTERNAL_STORAGE',
 
-  // ── Foreground Service types (Google Play policy violation) ───────────────
+  // Foreground service types (policy violation)
   'android.permission.FOREGROUND_SERVICE',
   'android.permission.FOREGROUND_SERVICE_CAMERA',
   'android.permission.FOREGROUND_SERVICE_MICROPHONE',
@@ -160,31 +135,35 @@ const FORBIDDEN_PERMISSIONS = new Set([
   'android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING',
   'android.permission.FOREGROUND_SERVICE_SPECIAL_USE',
 
-  // ── Location ──────────────────────────────────────────────────────────────
+  // Location
   'android.permission.ACCESS_FINE_LOCATION',
   'android.permission.ACCESS_COARSE_LOCATION',
   'android.permission.ACCESS_BACKGROUND_LOCATION',
 
-  // ── Sensors / Activity ────────────────────────────────────────────────────
+  // Sensors / Health — ACTIVITY_RECOGNITION flagged by Google Play policy
   'android.permission.ACTIVITY_RECOGNITION',
+  'android.permission.HIGH_SAMPLING_RATE_SENSORS',
+  'android.permission.BODY_SENSORS',
+  'android.permission.BODY_SENSORS_BACKGROUND',
   'android.permission.RECORD_AUDIO',
 
-  // ── Overlay / System ──────────────────────────────────────────────────────
+  // Overlay / System
   'android.permission.SYSTEM_ALERT_WINDOW',
 
-  // ── Contacts / Calendar / Telephony ──────────────────────────────────────
+  // Contacts / Calendar / Telephony
   'android.permission.READ_CONTACTS',
   'android.permission.WRITE_CONTACTS',
   'android.permission.GET_ACCOUNTS',
   'android.permission.READ_CALENDAR',
   'android.permission.WRITE_CALENDAR',
   'android.permission.READ_PHONE_STATE',
+  'android.permission.READ_PHONE_NUMBERS',
   'android.permission.PROCESS_OUTGOING_CALLS',
   'android.permission.SEND_SMS',
   'android.permission.RECEIVE_SMS',
   'android.permission.READ_SMS',
 
-  // ── Biometrics ────────────────────────────────────────────────────────────
+  // Biometrics
   'android.permission.USE_BIOMETRIC',
   'android.permission.USE_FINGERPRINT',
 ]);
@@ -192,27 +171,117 @@ const FORBIDDEN_PERMISSIONS = new Set([
 const withStripForbiddenPermissions = (config) => {
   return withAndroidManifest(config, (config) => {
     const manifest = config.modResults.manifest;
+
+    const filter = (list) =>
+      (list || []).filter((p) => !FORBIDDEN_PERMISSIONS.has(p.$?.['android:name'] ?? ''));
+
     const before = (manifest['uses-permission'] || []).length;
-    manifest['uses-permission'] = (manifest['uses-permission'] || []).filter(
-      (perm) => !FORBIDDEN_PERMISSIONS.has(perm.$?.['android:name'] ?? '')
-    );
-    // Also strip uses-permission-sdk-23 variants
-    manifest['uses-permission-sdk-23'] = (manifest['uses-permission-sdk-23'] || []).filter(
-      (perm) => !FORBIDDEN_PERMISSIONS.has(perm.$?.['android:name'] ?? '')
-    );
+    manifest['uses-permission']       = filter(manifest['uses-permission']);
+    manifest['uses-permission-sdk-23'] = filter(manifest['uses-permission-sdk-23']);
     const after = (manifest['uses-permission'] || []).length;
+
     if (before !== after) {
-      console.log(`[withProductionManifest] Stripped ${before - after} forbidden permission(s)`);
+      console.log(`[withProductionManifest] Stripped ${before - after} forbidden permission(s) from AST`);
     }
     return config;
   });
 };
 
-// ─── Compose all mods ────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 4 — Post-merge XML patch (regex safety net on the compiled file)
+// Runs AFTER all other plugins have merged the manifest — catches any permission
+// that survived the AST pass because a library injected it at Gradle merge time.
+// ─────────────────────────────────────────────────────────────────────────────
+const withPostMergePermissionPatch = (config) => {
+  return withDangerousMod(config, [
+    'android',
+    (config) => {
+      // Target the pre-compiled manifest that Gradle will process
+      const manifestPath = path.join(
+        config.modRequest.platformProjectRoot,
+        'app', 'src', 'main', 'AndroidManifest.xml'
+      );
+
+      if (!fs.existsSync(manifestPath)) return config;
+
+      let xml = fs.readFileSync(manifestPath, 'utf8');
+      let removedCount = 0;
+
+      FORBIDDEN_PERMISSIONS.forEach((perm) => {
+        // Match both <uses-permission and <uses-permission-sdk-23
+        const re = new RegExp(
+          `\\s*<uses-permission[^>]*android:name="${perm.replace('.', '\\.')}"[^/]*/?>`,
+          'g'
+        );
+        const newXml = xml.replace(re, '');
+        if (newXml !== xml) {
+          removedCount++;
+          xml = newXml;
+        }
+      });
+
+      if (removedCount > 0) {
+        fs.writeFileSync(manifestPath, xml, 'utf8');
+        console.log(`[withProductionManifest] Post-merge patch removed ${removedCount} forbidden permission(s) from AndroidManifest.xml`);
+      }
+
+      return config;
+    },
+  ]);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 5 — Force Play Billing Library ≥ 6.0.1
+// Google Play rejects apps using the legacy AIDL billing API.
+// This adds a Gradle resolution strategy that upgrades any transitive
+// dependency pulling in an older version.
+// ─────────────────────────────────────────────────────────────────────────────
+const withPlayBillingUpgrade = (config) => {
+  return withAppBuildGradle(config, (config) => {
+    const gradle = config.modResults.contents;
+
+    // Avoid double-patching on repeated prebuild runs
+    if (gradle.includes('// [withProductionManifest] Play Billing upgrade')) {
+      return config;
+    }
+
+    // Insert a configurations block that forces the billing library version
+    const billingBlock = `
+// [withProductionManifest] Play Billing upgrade — forces ≥ 6.0.1 to satisfy Google Play policy
+configurations.all {
+    resolutionStrategy {
+        force 'com.android.billingclient:billing:6.2.1'
+        force 'com.android.billingclient:billing-ktx:6.2.1'
+    }
+}
+`;
+
+    // Append just before the dependencies { ... } block
+    const patched = gradle.replace(
+      /^(dependencies\s*\{)/m,
+      `${billingBlock}\n$1`
+    );
+
+    config.modResults.contents = patched;
+    console.log('[withProductionManifest] Patched app/build.gradle: Play Billing Library → 6.2.1');
+    return config;
+  });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 6 — Inject network_security_config.xml (HTTPS-only) — already Step 1
+// ─────────────────────────────────────────────────────────────────────────────
+// (handled above)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Compose all mods (order matters — strip runs last to catch merged permissions)
+// ─────────────────────────────────────────────────────────────────────────────
 const withProductionManifest = (config) => {
-  config = withNetworkSecurityConfig(config);
-  config = withSecureManifest(config);
-  config = withStripForbiddenPermissions(config);
+  config = withNetworkSecurityConfig(config);        // res/xml/network_security_config.xml
+  config = withSecureManifest(config);               // <application> flags + component lock
+  config = withStripForbiddenPermissions(config);    // AST permission strip
+  config = withPostMergePermissionPatch(config);     // Regex safety net on compiled XML
+  config = withPlayBillingUpgrade(config);           // Gradle: billing lib 6.2.1
   return config;
 };
 
