@@ -2,7 +2,7 @@
   "expo": {
     "name": "onspace-app",
     "slug": "onspace-app",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
     "scheme": "onspaceapp",
@@ -12,7 +12,7 @@
       "supportsTablet": true
     },
     "android": {
-      "versionCode": 3,
+      "versionCode": 5,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
@@ -29,17 +29,18 @@
         "android.permission.VIBRATE"
       ],
       "blockedPermissions": [
+        "android.permission.ACTIVITY_RECOGNITION",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.READ_MEDIA_AUDIO",
-        "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.MANAGE_EXTERNAL_STORAGE",
         "android.permission.READ_CALENDAR",
         "android.permission.WRITE_CALENDAR",
-        "android.permission.ACTIVITY_RECOGNITION",
-        "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_CONTACTS",
         "android.permission.WRITE_CONTACTS",
         "android.permission.GET_ACCOUNTS",
@@ -50,8 +51,6 @@
         "android.permission.FOREGROUND_SERVICE_MICROPHONE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.MANAGE_EXTERNAL_STORAGE",
         "android.permission.PROCESS_OUTGOING_CALLS",
         "android.permission.READ_PHONE_STATE",
         "android.permission.SEND_SMS",
@@ -85,11 +84,6 @@
         }
       ]
     },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/logo.png"
-    },
     "plugins": [
       "expo-router",
       "./plugins/withProductionManifest",
@@ -104,20 +98,8 @@
           }
         }
       ],
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/logo.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
-        }
-      ],
       "expo-camera"
     ],
-    "experiments": {
-      "typedRoutes": true
-    },
     "extra": {
       "eas": {
         "projectId": "c102ae5b-583e-4af3-9643-7f32b9e5f1b1"
