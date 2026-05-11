@@ -114,6 +114,8 @@ const withSecureManifest = (config) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STEP 3 — Strip forbidden <uses-permission> via XML AST (in-memory pass)
+// AND inject tools:node="remove" markers so Gradle manifest merger also strips
+// any permission re-injected by transitive dependencies at compile time.
 // ─────────────────────────────────────────────────────────────────────────────
 const FORBIDDEN_PERMISSIONS = new Set([
   // Media — READ_MEDIA_VIDEO is flagged by Google Play policy
@@ -172,13 +174,44 @@ const withStripForbiddenPermissions = (config) => {
   return withAndroidManifest(config, (config) => {
     const manifest = config.modResults.manifest;
 
+    // Ensure tools namespace is declared on <manifest> root
+    manifest.$ = manifest.$ || {};
+    manifest.$['xmlns:tools'] = 'http://schemas.android.com/tools';
+
     const filter = (list) =>
       (list || []).filter((p) => !FORBIDDEN_PERMISSIONS.has(p.$?.['android:name'] ?? ''));
 
     const before = (manifest['uses-permission'] || []).length;
-    manifest['uses-permission']       = filter(manifest['uses-permission']);
+    manifest['uses-permission']        = filter(manifest['uses-permission']);
     manifest['uses-permission-sdk-23'] = filter(manifest['uses-permission-sdk-23']);
     const after = (manifest['uses-permission'] || []).length;
+
+    // Inject tools:node="remove" markers for every forbidden permission.
+    // These survive Gradle manifest merge and instruct aapt to strip any
+    // copy re-injected by a transitive dependency (the CORRECT approach).
+    const existing = new Set(
+      (manifest['uses-permission'] || []).map((p) => p.$?.['android:name'])
+    );
+
+    const removeMarkers = [];
+    FORBIDDEN_PERMISSIONS.forEach((perm) => {
+      if (!existing.has(perm)) {
+        removeMarkers.push({
+          $: {
+            'android:name': perm,
+            'tools:node': 'remove',
+          },
+        });
+      }
+    });
+
+    if (removeMarkers.length > 0) {
+      manifest['uses-permission'] = [
+        ...(manifest['uses-permission'] || []),
+        ...removeMarkers,
+      ];
+      console.log(`[withProductionManifest] Injected ${removeMarkers.length} tools:node="remove" markers`);
+    }
 
     if (before !== after) {
       console.log(`[withProductionManifest] Stripped ${before - after} forbidden permission(s) from AST`);
@@ -209,8 +242,10 @@ const withPostMergePermissionPatch = (config) => {
 
       FORBIDDEN_PERMISSIONS.forEach((perm) => {
         // Match both <uses-permission and <uses-permission-sdk-23
+        // Use /g flag on replace so ALL dots in the permission name are escaped
+        const escapedPerm = perm.replace(/\./g, '\\.');
         const re = new RegExp(
-          `\\s*<uses-permission[^>]*android:name="${perm.replace('.', '\\.')}"[^/]*/?>`,
+          `\\s*<uses-permission[^>]*android:name="${escapedPerm}"[^/]*/?>`,
           'g'
         );
         const newXml = xml.replace(re, '');
@@ -256,11 +291,9 @@ configurations.all {
 }
 `;
 
-    // Append just before the dependencies { ... } block
-    const patched = gradle.replace(
-      /^(dependencies\s*\{)/m,
-      `${billingBlock}\n$1`
-    );
+    // Append at end of file to avoid matching nested dependencies{} blocks
+    // inside android{} or other blocks which would break the build
+    const patched = gradle.trimEnd() + '\n' + billingBlock;
 
     config.modResults.contents = patched;
     console.log('[withProductionManifest] Patched app/build.gradle: Play Billing Library → 6.2.1');
